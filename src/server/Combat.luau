@@ -113,7 +113,7 @@ function Combat.init(infos, PlayerService)
 		return damage
 	end
 
-	Net.event("Attack").OnServerEvent:Connect(function(player: Player, direction: unknown)
+	Net.event("Attack").OnServerEvent:Connect(function(player: Player, direction: unknown, aim: unknown)
 		if direction ~= "side" and direction ~= "up" and direction ~= "down" and direction ~= "cleave" then
 			return
 		end
@@ -130,8 +130,18 @@ function Combat.init(infos, PlayerService)
 			return
 		end
 		local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+		-- The client auto-aims toward nearby targets and sends that heading; accept it as long
+		-- as it's roughly where the character is facing (the turn may not have replicated yet).
+		local swingFrame = root.CFrame
+		if typeof(aim) == "Vector3" and aim.Magnitude > 0.5 then
+			local a = Vector3.new(aim.X, 0, aim.Z)
+			if a.Magnitude > 0.5 and a.Unit:Dot(look) > -0.2 then
+				look = a.Unit
+				swingFrame = CFrame.lookAt(root.Position, root.Position + look)
+			end
+		end
 		local reach = if PlayerService.hasCharm(player, "long_reach") then 1.35 else 1
-		local boxCFrame, size = Hitbox.nail(root.CFrame, direction :: string, reach)
+		local boxCFrame, size = Hitbox.nail(swingFrame, direction :: string, reach)
 		-- A little extra room to forgive network latency.
 		size += Vector3.new(1.5, 1.5, 1.5)
 		local character = player.Character

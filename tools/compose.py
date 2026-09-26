@@ -524,9 +524,30 @@ def sound_effects():
     saw = sum(np.sin(k * phase) / k for k in range(1, 25))
     x = lowpass(saw, 1400) * np.sin(np.pi * np.clip(t / 1.6, 0, 1)) + lowpass(_noise(1.6, 12), 900) * 0.4 * np.sin(np.pi * t / 1.6)
     _write_sfx("roar", np.tanh(x * 1.8))
+    extra_effects()
+
+
+def extra_effects():
+    # Shatter: a creature breaking apart - a dull crack, then glassy fragments scattering.
+    t = _t(0.7)
+    x = lowpass(_noise(0.7, 13), 900) * np.exp(-t * 25) + np.sin(2 * np.pi * 95 * t) * np.exp(-t * 18) * 0.8
+    rng = np.random.default_rng(14)
+    for _ in range(14):
+        d = rng.uniform(0.03, 0.45)
+        f = rng.uniform(1800, 5200)
+        x += np.sin(2 * np.pi * f * t) * np.exp(-np.clip(t - d, 0, None) * 40) * (t >= d) * rng.uniform(0.15, 0.35)
+    _write_sfx("shatter", x)
+    # Impact: the heavy hit of a charged strike or a blow taken - low body, sharp top.
+    t = _t(0.35)
+    x = _sweep(140, 45, 0.35) * np.exp(-t * 12) + _bandpass(_noise(0.35, 15), 2500, 9000) * np.exp(-t * 60) * 0.7
+    _write_sfx("impact", np.tanh(x * 2))
 
 
 if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["extra"]:
+        extra_effects()
+        sys.exit()
     ashen_burrows()
     mothlight_ruins()
     verdant_hush()

@@ -86,7 +86,7 @@ local function flat(v: Vector3): Vector3
 end
 
 -- World-space movement direction from the stick and the camera's heading.
-local function moveWorld(): Vector3
+function Movement.moveWorld(): Vector3
 	local mv = Input.move()
 	if mv.Magnitude < 0.05 then
 		return Vector3.zero
@@ -213,7 +213,7 @@ local function step(_dt: number)
 	wasGrounded = grounded
 	State.grounded = grounded
 
-	local move = moveWorld()
+	local move = Movement.moveWorld()
 	local locked = now < lockUntil
 	local dashing = now < dashUntil
 	local dodging = now < dodgeUntil

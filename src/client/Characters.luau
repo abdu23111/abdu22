@@ -159,7 +159,7 @@ local function locomotion(entry: Entry, root: BasePart): (string, number)
 			return "wall", 1
 		elseif action == "heal" then
 			return "heal", 1
-		elseif action == "charge" then
+		elseif State.charging then
 			return "charge", 1
 		elseif State.freezes.charms then
 			return "sit", 1

@@ -24,13 +24,23 @@ local tracks: { [string]: Sound } = {}
 local currentTrack: string? = nil
 local endingPlayed = false
 local colorCorrection: ColorCorrectionEffect
+local atmosphere: Atmosphere
 
 local function makeEffects()
 	for _, child in Lighting:GetChildren() do
 		if child:IsA("Atmosphere") then
-			child:Destroy() -- Atmosphere would override our fog.
+			child:Destroy()
 		end
 	end
+	-- A volumetric haze that swallows the far caverns; each region tints it.
+	atmosphere = Instance.new("Atmosphere")
+	atmosphere.Density = 0.4
+	atmosphere.Offset = 0
+	atmosphere.Glare = 0
+	atmosphere.Haze = 1.6
+	atmosphere.Color = Color3.fromRGB(16, 19, 30)
+	atmosphere.Decay = Color3.fromRGB(8, 9, 14)
+	atmosphere.Parent = Lighting
 	Lighting.Brightness = 1
 	Lighting.ClockTime = 0
 	Lighting.GlobalShadows = true
@@ -50,10 +60,10 @@ local function makeEffects()
 	bloom.Parent = Lighting
 
 	local dof = Instance.new("DepthOfFieldEffect")
-	dof.FocusDistance = Config.CAMERA_DISTANCE
-	dof.InFocusRadius = 26
-	dof.FarIntensity = 0.5
-	dof.NearIntensity = 0.3
+	dof.FocusDistance = 18
+	dof.InFocusRadius = 40
+	dof.FarIntensity = 0.22
+	dof.NearIntensity = 0
 	dof.Parent = Lighting
 
 	-- Vignette built from four gradient edges.
@@ -133,6 +143,11 @@ local function applyZone(index: number)
 		OutdoorAmbient = theme.outdoor,
 	}):Play()
 	TweenService:Create(colorCorrection, info, { TintColor = theme.tint }):Play()
+	TweenService:Create(atmosphere, info, {
+		Color = theme.fog,
+		Decay = theme.fog:Lerp(Color3.new(0, 0, 0), 0.5),
+		Density = math.clamp(95 / theme.fogEnd, 0.3, 0.5),
+	}):Play()
 	HUD.areaTitle(zone.name, zone.subtitle, "area")
 end
 
@@ -193,6 +208,7 @@ function Atmosphere.init()
 			OutdoorAmbient = Color3.fromRGB(110, 96, 80),
 			FogColor = Color3.fromRGB(70, 56, 44),
 		}):Play()
+		TweenService:Create(atmosphere, TweenInfo.new(8), { Color = Color3.fromRGB(120, 96, 70), Density = 0.3 }):Play()
 	end
 
 	task.spawn(function()

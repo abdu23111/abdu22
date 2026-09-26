@@ -10,6 +10,9 @@ local Pickups = require(script.Parent.Pickups)
 local Cinematics = require(script.Parent.Cinematics)
 local Journal = require(script.Parent.Journal)
 local Shortcuts = require(script.Parent.Shortcuts)
+local Characters = require(script.Parent.Characters)
+local Creatures = require(script.Parent.Creatures)
+local NPCs = require(script.Parent.NPCs)
 
 HUD.onGeo = function()
 	require(script.Parent.Sfx).play("geo", 1 + math.random() * 0.2)
@@ -19,9 +22,17 @@ Menus.init()
 Cinematics.init()
 Journal.init()
 Atmosphere.init()
-Movement.onTeleport = CameraController.snap
+Movement.onTeleport = function(facing: Vector3?)
+	CameraController.snap()
+	if facing then
+		CameraController.faceDirection(facing)
+	end
+end
 Movement.init()
 CameraController.init()
+Characters.init()
+Creatures.init()
+NPCs.init()
 CombatClient.init()
 Pickups.init()
 Shortcuts.init()

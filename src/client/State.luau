@@ -15,6 +15,7 @@ local State = {
 	moveSpeed = 0,
 	facingVector = Vector3.xAxis,
 	talkingTo = nil :: string?,
+	charging = false,
 	invulnUntil = 0,
 	dead = false,
 	-- Movement is paused while any of these reasons is active (dialogue, transitions, death...).

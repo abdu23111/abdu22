@@ -110,6 +110,8 @@ Config.SFX = {
 	lever = { "", "rbxasset://sounds/swordlunge.wav" },
 	door = { "", "" },
 	ui = { "", "rbxasset://sounds/electronicpingshort.wav" },
+	shatter = { "", "" },
+	impact = { "", "rbxasset://sounds/swordlunge.wav" },
 }
 Config.SFX_VOLUME = 0.45
 

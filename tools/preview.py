@@ -271,8 +271,48 @@ def sheet(rig, clips, cols=4, size=(300, 300), fps=24):
     return frames
 
 
+def mixed_sheet(entries, cols=4, size=(260, 260), fps=24, seconds=None):
+    """One GIF of several (rig, clip) pairs from different rigs playing side by side."""
+    renders = []
+    for name, clip in entries:
+        rig = load(name)
+        renders.append(render_clip(rig, clip, rig["clips"][clip], fps, size))
+    n = int(seconds * fps) if seconds else max(len(r) for r in renders)
+    rows = math.ceil(len(entries) / cols)
+    frames = []
+    for i in range(n):
+        canvas = Image.new("RGB", (cols * size[0], rows * size[1]), (10, 10, 14))
+        for j, seq in enumerate(renders):
+            canvas.paste(seq[i % len(seq)], ((j % cols) * size[0], (j // cols) * size[1]))
+        frames.append(canvas)
+    return frames
+
+
+SHOWCASE = {
+    "showcase_wanderer": [("wanderer", c) for c in ["idle", "run", "attackSide", "attackUp", "attackDown", "cleave", "dash", "heal"]],
+    "showcase_npcs": [(n, "idle") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
+    "showcase_npcs_talk": [(n, "talk") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
+    "showcase_enemies": [("mite", "move"), ("crystal_mite", "attack"), ("gnat", "move"), ("wisp", "attack"),
+                         ("bulb", "attack"), ("shellguard", "attack"), ("hopper", "attack"), ("mite", "attack")],
+    "showcase_bosses": [("gravelmaw", "attack"), ("vantis", "attack"), ("widow", "attack"), ("asterion", "shoot"),
+                        ("quartzelle", "attack"), ("murrow", "shoot"), ("echo", "attack"), ("asterion", "roar")],
+}
+
+
+def showcase():
+    os.makedirs(OUT, exist_ok=True)
+    for name, entries in SHOWCASE.items():
+        frames = mixed_sheet(entries, seconds=2.5)
+        save_gif(frames, os.path.join(OUT, f"{name}.gif"), fps=24)
+        frames[len(frames) // 3].save(os.path.join(OUT, f"{name}.png"))
+        print("rendered", name)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if sys.argv[1:] == ["showcase"]:
+        showcase()
+        return
     names = [sys.argv[1]] if len(sys.argv) > 1 else sorted(f[:-5] for f in os.listdir(RIGS) if f.endswith(".json"))
     for name in names:
         rig = load(name)

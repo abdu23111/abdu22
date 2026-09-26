@@ -169,6 +169,7 @@ local function runDialogue(npcId: string)
 	talking = true
 	ProximityPromptService.Enabled = false
 	State.freeze("dialogue", true)
+	State.talkingTo = npcId
 	local lines, speaker = pickLines(npcId)
 	speakerName.Text = string.upper(speaker.name)
 	speakerTitle.Text = speaker.title or ""
@@ -209,6 +210,7 @@ local function runDialogue(npcId: string)
 	dialogueFrame.Visible = false
 	shopFrame.Visible = false
 	State.freeze("dialogue", false)
+	State.talkingTo = nil
 	talking = false
 	talkEndedAt = os.clock()
 	task.delay(0.4, function()

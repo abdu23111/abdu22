@@ -257,28 +257,19 @@ local function spawnEcho(player: Player)
 	local echo = data.echo
 	local model = make("Model", { Name = "Echo_" .. player.Name })
 	model:SetAttribute("Owner", player.UserId)
+	-- An invisible hitbox; every client draws the Wanderer's shade rig over it (Characters/Creatures).
 	local body = make("Part", {
 		Name = "Body",
-		Shape = Enum.PartType.Ball,
-		Size = Vector3.new(3, 3.6, 3),
-		Position = Vector3.new(echo.x, echo.y, 0),
+		Size = Vector3.new(3, 5, 3),
+		Position = Vector3.new(echo.x, echo.y, echo.z or 0),
 		Anchored = true,
 		CanCollide = false,
-		Color = Color3.fromRGB(12, 10, 18),
-		Material = Enum.Material.SmoothPlastic,
-		Transparency = 0.15,
+		Transparency = 1,
 		Parent = model,
 	})
-	make("Part", {
-		Shape = Enum.PartType.Ball,
-		Size = Vector3.new(1.8, 1.6, 1),
-		Position = body.Position + Vector3.new(0, 0.9, 1.2),
-		Anchored = true,
-		CanCollide = false,
-		CanQuery = false,
-		Color = Color3.fromRGB(230, 230, 236),
-		Parent = model,
-	})
+	model:SetAttribute("Rig", "echo")
+	model:SetAttribute("Anim", "idle")
+	model:SetAttribute("Anchor", 2.5)
 	make("ParticleEmitter", {
 		Texture = "rbxasset://textures/particles/smoke_main.dds",
 		Color = ColorSequence.new(Color3.fromRGB(20, 16, 30)),
@@ -336,7 +327,7 @@ local function die(player: Player)
 	local root = rootOf(player)
 	if data and root then
 		if data.geo > 0 then
-			data.echo = { x = root.Position.X, y = root.Position.Y, geo = data.geo }
+			data.echo = { x = root.Position.X, y = root.Position.Y, z = root.Position.Z, geo = data.geo }
 			data.geo = 0
 			player:SetAttribute("Geo", 0)
 		end
