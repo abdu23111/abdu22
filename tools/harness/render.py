@@ -414,7 +414,7 @@ def default_shots(scene):
         zone = scene["zones"][zi]
         x0, x1 = zone["min"][0], zone["max"][0]
         spots = []
-        if zi == 1 and scene["start"]:
+        if scene["start"] and x0 <= scene["start"][0] <= x1:
             spots.append(scene["start"])
         for p in scene["parts"]:
             if p["z"] == zi and p["n"] == "NPCAnchor":

@@ -279,7 +279,7 @@ local function buildBlockers(zoneIndex: number, zoneId: string, chars, w: number
 end
 
 local function buildDoors(zoneIndex: number, chars, w: number, h: number, theme, doorsFolder: Folder)
-	for d = 1, 9 do
+	for d = 0, 9 do
 		local digit = tostring(d)
 		for _, rect in mergeRects(chars, w, h, function(c)
 			return c == digit

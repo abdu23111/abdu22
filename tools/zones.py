@@ -40,7 +40,8 @@ def burrows():
     m = Map(140, 30)
     f, p = m.fill, m.put
     f(1, 24, 1, 12)                       # start room ceiling
-    f(1, 24, 26, 30); p(5, 25, "S"); p(8, 25, "B"); p(12, 25, "W")
+    f(1, 24, 26, 30); p(8, 25, "B"); p(12, 25, "W")
+    f(1, 1, 23, 25, "0")                  # back west to Palewind Hollow
     # Steps up the start room to a high ledge; the last gap needs the Drift Cloak.
     f(19, 22, 24, 24); f(13, 16, 22, 22); f(19, 22, 20, 20); f(13, 16, 18, 18)
     f(2, 7, 18, 18); f(1, 1, 15, 17, "4"); p(4, 17, "M")
@@ -253,6 +254,31 @@ def trials():
     return m
 
 
+def palewind():
+    """Palewind Hollow: the opening walk. A long, misty blue cavern with a cobbled path,
+    gentle rises, a thorn gully with a stepping stone, a high ledge worth climbing for, and a
+    doorway east into the Ashen Burrows."""
+    m = Map(170, 26)
+    f, p = m.fill, m.put
+    f(1, 170, 1, 3)
+    f(1, 170, 22, 26)
+    p(6, 21, "S"); p(16, 21, "B"); p(24, 21, "L")
+    # A soft rise and fall in the path.
+    f(38, 56, 21, 21); f(44, 50, 20, 20)
+    p(62, 21, "c")
+    # Steps up to a ledge between two rock pillars hanging from the ceiling; wall-jump
+    # between them to reach a cache near the roof.
+    f(70, 72, 20, 20); f(78, 81, 18, 18)
+    f(76, 77, 4, 15); f(82, 83, 4, 14); p(80, 5, "$")
+    p(96, 14, "f")
+    # A thorn gully with a stepping stone.
+    f(104, 115, 22, 22, "."); f(104, 115, 23, 23, "^"); f(107, 108, 22, 22); f(111, 112, 22, 22)
+    p(128, 21, "c"); p(140, 13, "f")
+    f(146, 158, 21, 21)
+    f(170, 170, 18, 21, "0")
+    return m
+
+
 def hollow():
     m = Map(120, 46)
     f, p = m.fill, m.put
@@ -350,6 +376,10 @@ META = [
         "M": '{ kind = "memory", id = "mire_bloom" }',
         "$": '{ kind = "geo", amount = 90 }',
     }, (3.6, 6.2), 1.9),
+    ("pass", "Palewind Hollow", "Where the wind goes quiet", "hush", "burrows", palewind, {
+        "L": '{ kind = "npc", id = "tablet_pass", tablet = true }',
+        "$": '{ kind = "geo", amount = 50 }',
+    }, (0.4, 2.4)),
     ("trials", "Hall of Trials", "Where every foe waits again", "temple", "temple", trials, {
         "V": '{ kind = "trial" }',
         "L": '{ kind = "npc", id = "tablet_trials", tablet = true }',
@@ -398,7 +428,7 @@ def main():
         wide = entry[8] if len(entry) > 8 else None
         rows = fn().rows()
         assert len({len(r) for r in rows}) == 1, zid
-        used = set("".join(rows)) - set("#%^~XY=!?.SBGT123456789cfsgmhwo")
+        used = set("".join(rows)) - set("#%^~XY=!?.SBGT0123456789cfsgmhwo")
         missing = used - set(specials)
         assert not missing, (zid, missing)
         shown.append((zid, rows))
@@ -427,7 +457,7 @@ def main():
     # Every doorway digit must appear in exactly two zones.
     doors = {}
     for zid, rows in shown:
-        for d in "123456789":
+        for d in "0123456789":
             if any(d in r for r in rows):
                 doors.setdefault(d, []).append(zid)
     for d, zs in doors.items():

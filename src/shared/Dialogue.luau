@@ -268,6 +268,17 @@ local Dialogue: { [string]: Speaker } = {
 			},
 		},
 	},
+	tablet_pass = {
+		name = "Wayside Stone",
+		sets = {
+			{
+				lines = {
+					"'TRAVELLER. THE KINGDOM BELOW SLEEPS UNDER THE HUSH. ITS LAMP HAS GONE COLD.'",
+					"'EAST LIES THE OLD DIGGING. REST AT THE BENCH, AND WALK SOFTLY.'",
+				},
+			},
+		},
+	},
 	tablet_trials = {
 		name = "Hall Inscription",
 		sets = {

@@ -1394,6 +1394,148 @@ STYLES.abyss = {
 	end,
 }
 
+-- ----- Palewind Hollow: blue mist, cobbles, curling ferns, black foreground silhouettes -----
+
+-- A pale fern frond that rises and curls over at the tip like a fiddlehead. Sways gently.
+local function curlFern(floor: Vector3, height: number, dir: number, color: Color3)
+	local model = Instance.new("Model")
+	model.Name = "Strand"
+	model:SetAttribute("Sway", 0.06)
+	model.WorldPivot = CFrame.new(floor)
+	model.Parent = parent
+	local outer = parent
+	parent = model
+	local n = 11
+	local step = height / n * 1.25
+	local p = floor
+	local a = math.rad(90 + rng:NextNumber(-10, 10))
+	for i = 1, n do
+		local t = i / n
+		-- Straight at first, then curling ever tighter toward `dir`.
+		a -= dir * math.rad(9 + 100 * t * t)
+		local q = p + Vector3.new(math.cos(a), math.sin(a), 0) * step * (1 - 0.45 * t)
+		rod(p, q, 0.22 * (1 - 0.55 * t) + 0.06, color)
+		p = q
+	end
+	ball(p, 0.22, color)
+	parent = outer
+end
+
+-- A tall, hooked black thorn like a claw rising from the ground.
+local function hookThorn(base: Vector3, height: number, dir: number, color: Color3)
+	local n = 9
+	local p = base
+	local a = math.rad(90)
+	for i = 1, n do
+		local t = i / n
+		a -= dir * math.rad(2 + 14 * t)
+		local q = p + Vector3.new(math.cos(a), math.sin(a), 0) * (height / n)
+		rod(p, q, 1.3 * (1 - t) + 0.12, color)
+		p = q
+	end
+end
+
+STYLES.hush = {
+	floor = function(pos, side, space, lit, collide)
+		local r = rng:NextNumber()
+		if r < 0.45 then
+			-- A clump of pale curling fronds.
+			for _ = 1, rng:NextInteger(3, 6) do
+				local at = pos + Vector3.new(rng:NextNumber(-2.5, 2.5), 0, rng:NextNumber(-1.5, 1.5))
+				curlFern(at, rng:NextNumber(2.5, math.min(7, space * 0.35)), if rng:NextNumber() < 0.5 then -1 else 1, vary(theme.flora, 0.06))
+			end
+			if lit then
+				local glow = ball(pos + Vector3.new(0, 1.2, 0), 0.6, theme.accent, Enum.Material.Neon)
+				glow.Transparency = 0.4
+				light(glow, pick(theme.glow), 22, 1.4, false, "glow")
+				return true
+			end
+		elseif r < 0.65 then
+			hookThorn(pos + Vector3.new(0, 0, -1), rng:NextNumber(5, math.min(12, space * 0.5)), if rng:NextNumber() < 0.5 then -1 else 1, theme.rockDark)
+		elseif r < 0.85 then
+			-- Smooth rounded shell-stones, half sunk.
+			for _ = 1, rng:NextInteger(1, 3) do
+				local d = rng:NextNumber(2.5, 5)
+				ellipsoid(CFrame.new(pos + Vector3.new(rng:NextNumber(-3, 3), d * 0.2, rng:NextNumber(-1, 0.5))), Vector3.new(d * 1.3, d, d), vary(theme.rock, 0.05))
+			end
+		else
+			grassTuft(pos, theme.flora)
+		end
+		return false
+	end,
+	wall = function(pos, side, lit)
+		local r = rng:NextNumber()
+		if lit then
+			local glow = ball(pos, 0.8, theme.accent, Enum.Material.Neon)
+			glow.Transparency = 0.3
+			light(glow, pick(theme.glow), 26, 1.2, false, "glow")
+		elseif r < 0.5 then
+			-- Layered shell ribs: the cave wall bulging in soft rounded bands.
+			for i = 0, 2 do
+				ellipsoid(CFrame.new(pos + Vector3.new(0, i * 2.2, -side * 0.2)), Vector3.new(rng:NextNumber(7, 11), 2.4, 2), vary(theme.rock:Lerp(theme.far[1], 0.4), 0.04))
+			end
+		elseif r < 0.75 then
+			crack(pos, side, nil)
+		else
+			for _ = 1, rng:NextInteger(1, 3) do
+				strand(pos + Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(2, 5), -side * 0.3), rng:NextNumber(3, 7), 0.22, theme.rockDark, Enum.Material.SmoothPlastic, nil, nil)
+			end
+		end
+	end,
+	hang = function(pos, maxLen)
+		local r = rng:NextNumber()
+		if r < 0.5 then
+			strand(pos, math.min(maxLen, rng:NextNumber(4, 12)), rng:NextNumber(0.25, 0.45), theme.rockDark, Enum.Material.SmoothPlastic, nil, nil)
+		elseif r < 0.8 then
+			local len = math.min(maxLen, rng:NextNumber(3, 8))
+			spike(pos, -Vector3.yAxis, len, len * 0.22, vary(theme.rock, 0.04), theme.material, theme.rim)
+		else
+			hangingLantern(pos, pos - Vector3.new(0, math.min(maxLen, rng:NextNumber(3, 8)), 0), pick(theme.glow), theme.rockDark, 20)
+		end
+	end,
+	ground = function(pos)
+		local r = rng:NextNumber()
+		if r < 0.5 then
+			curlFern(pos, rng:NextNumber(1.2, 2.6), if rng:NextNumber() < 0.5 then -1 else 1, vary(theme.flora, 0.06))
+		elseif r < 0.8 then
+			grassTuft(pos, theme.flora)
+		else
+			pebbles(pos)
+		end
+	end,
+	trim = function(x1, x2, y, z, side)
+		if side < 0 then
+			trimStrip(x1, x2, y, z, side, theme.rock, theme.material, 0.5, 2)
+			return
+		end
+		-- A worn cobblestone lip along the front of the path: two rows of rounded stones.
+		local x = x1
+		while x < x2 do
+			local wdt = rng:NextNumber(1.3, 2.3)
+			ellipsoid(CFrame.new(x + wdt / 2, y - 0.05, z - 0.6), Vector3.new(wdt, rng:NextNumber(0.55, 0.8), 1.4), vary(theme.rim:Lerp(theme.rock, 0.45), 0.06), Enum.Material.Slate)
+			x += wdt * 0.92
+		end
+		x = x1 + 0.6
+		while x < x2 do
+			local wdt = rng:NextNumber(1.6, 2.6)
+			ellipsoid(CFrame.new(x + wdt / 2, y - 0.75, z - 0.2), Vector3.new(wdt, rng:NextNumber(0.7, 1.0), 1.2), vary(theme.rock:Lerp(theme.rim, 0.2), 0.06), Enum.Material.Slate)
+			x += wdt * 0.9
+		end
+	end,
+	archStyle = "root",
+	platform = "stone",
+	vista = function(center, side, width, height)
+		local hz = math.abs(center.Z) - WALL / 2
+		local floorY, z0, far = backdrop(center, side, width, height, hz)
+		-- Great pale shell-shapes far off in the mist, lit from within.
+		for i = 1, 6 do
+			local p = Vector3.new(center.X + rng:NextNumber(-width / 2 - 60, width / 2 + 60), floorY + rng:NextNumber(10, height + 40), (z0 + far) / 2 + side * (20 + i * 8))
+			ellipsoid(CFrame.new(p), Vector3.new(rng:NextNumber(40, 80), rng:NextNumber(20, 40), 6), theme.far[math.min(3, 1 + i % 3)])
+		end
+		vistaLights(center, side, z0, far)
+	end,
+}
+
 -- ----- The Glowmire: giant blue mushrooms and still, glowing pools -----
 STYLES.glowmire = {
 	floor = function(pos, side, space, lit, collide)
@@ -1930,6 +2072,58 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 	end
 
 	mark("vistas")
+	-- ===== 9. Palewind Hollow's atmosphere: glowing mist behind, black silhouettes in front =====
+	if theme.decor == "hush" and SIDE_VIEW then
+		-- Soft pools of light in the haze just in front of the back wall, and slow motes.
+		local x = ox + rng:NextNumber(10, 30)
+		local xEnd = ox + w * T
+		while x < xEnd do
+			local col = math.clamp(math.floor((x - ox) / T) + 1, 1, w)
+			local floorR = nil
+			for r = h - 1, 2, -1 do
+				if not isSolid(chars, col, r, w, h) and isSolid(chars, col, r + 1, w, h) then
+					floorR = r
+					break
+				end
+			end
+			if floorR then
+				local fy = rowTop(floorR + 1)
+				local hz = hzAt(col)
+				-- A wide, soft light washing the back wall: the glow through the mist.
+				local glow = block(CFrame.new(x, fy + rng:NextNumber(16, 26), -hz + 4), Vector3.new(0.2, 0.2, 0.2), theme.accent, Enum.Material.Neon)
+				glow.Transparency = 1
+				light(glow, theme.accent, 55, 1.6, false, "glow")
+				-- Rounded shell bands layered on the back wall, like the ribs of something vast.
+				for i = 0, rng:NextInteger(2, 4) do
+					ellipsoid(CFrame.new(x + rng:NextNumber(-20, 20), fy + 6 + i * rng:NextNumber(5, 8), -hz + 0.6), Vector3.new(rng:NextNumber(24, 40), rng:NextNumber(6, 9), 1.2), vary(theme.far[1], 0.05))
+				end
+				local host = block(CFrame.new(x, fy + 12, 0), Vector3.new(0.2, 0.2, 0.2), theme.accent, Enum.Material.Neon)
+				host.Transparency = 1
+				motes(host, theme.accent, 1.2, 0.3)
+			end
+			x += rng:NextNumber(45, 70)
+		end
+		-- Near-black mounds and hooked thorns between the camera and the path. They sit low,
+		-- framing the bottom of the screen without hiding the player.
+		local BLACKISH = theme.rockDark:Lerp(BLACK, 0.55)
+		for _, st in strips do
+			local x1, x2 = colX(st.c1), colX(st.c2)
+			local fx = x1 + rng:NextNumber(8, 30)
+			while fx < x2 do
+				local zc = FRONT + rng:NextNumber(7, 12)
+				local wdt = rng:NextNumber(14, 26)
+				local ht = rng:NextNumber(8, 14)
+				ellipsoid(CFrame.new(fx, st.y - ht * 0.5 + rng:NextNumber(0.5, 2.5), zc), Vector3.new(wdt, ht, 6), BLACKISH)
+				if rng:NextNumber() < 0.5 then
+					ellipsoid(CFrame.new(fx + rng:NextNumber(-8, 8), st.y - 6, zc + 1), Vector3.new(wdt * 0.7, 10, 5), BLACKISH)
+				end
+				if rng:NextNumber() < 0.2 then
+					hookThorn(Vector3.new(fx + rng:NextNumber(-6, 6), st.y - 4, zc + 2), rng:NextNumber(10, 16), if rng:NextNumber() < 0.5 then -1 else 1, BLACKISH)
+				end
+				fx += rng:NextNumber(40, 75)
+			end
+		end
+	end
 	if CaveArt.debug then
 		print(string.format("[CaveArt] zone %d: %s", zoneIndex, table.concat(sections, " ")))
 	end

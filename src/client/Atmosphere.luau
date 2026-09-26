@@ -197,7 +197,40 @@ local function setZoneEffects(active: number)
 	end
 end
 
+-- A soft dark vignette around the screen edges that frames every scene.
+local function makeVignette()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "Vignette"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = -5
+	gui.Parent = player:WaitForChild("PlayerGui")
+	local edges = {
+		{ UDim2.new(1, 0, 0.3, 0), UDim2.fromScale(0, 0), 90 },
+		{ UDim2.new(1, 0, 0.3, 0), UDim2.fromScale(0, 0.7), -90 },
+		{ UDim2.new(0.22, 0, 1, 0), UDim2.fromScale(0, 0), 0 },
+		{ UDim2.new(0.22, 0, 1, 0), UDim2.fromScale(0.78, 0), 180 },
+	}
+	for _, e in edges do
+		local f = Instance.new("Frame")
+		f.BorderSizePixel = 0
+		f.BackgroundColor3 = Color3.new(0, 0, 0)
+		f.Size = e[1]
+		f.Position = e[2]
+		f.Parent = gui
+		local g = Instance.new("UIGradient")
+		g.Rotation = e[3]
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.35),
+			NumberSequenceKeypoint.new(0.45, 0.8),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		g.Parent = f
+	end
+end
+
 function Atmosphere.init()
+	makeVignette()
 	makeEffects()
 	makeMusic()
 	collectEffects()

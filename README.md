@@ -124,10 +124,11 @@ Phones and tablets get on-screen buttons.
 
 ## The world
 
-Eight regions, linked in loops so later abilities open shortcuts back through earlier ground, plus the **Hall of Trials**.
+Nine regions, linked in loops so later abilities open shortcuts back through earlier ground, plus the **Hall of Trials**.
 
 | Region | Mood | Guardian | Reward |
 |---|---|---|---|
+| **Palewind Hollow** *(the start)* | A misty blue cavern: a worn cobbled path, pale curling ferns, black silhouettes in the foreground and a soft glow through the fog behind. It teaches wall jumping between two hanging pillars | none | A Geo cache under the roof |
 | **Ashen Burrows** | Ember-lit caves where the kingdom began | **Gravelmaw, the Tunneling Mother** | **Drift Cloak** (dash) |
 | **Glimmerdeep Mines** | Violet crystal caverns that hum with spilled memories | **Quartzelle, the Facet Matron** | **Cleaving Arc** (charged slash that breaks crystal seals) |
 | **Mothlight Ruins** | The fallen capital, pale lamps in silent windows | **Sir Vantis, the Hollow Sentinel** | **Thorn Claws** (a memento; wall sliding and wall jumping are available from the start) |
