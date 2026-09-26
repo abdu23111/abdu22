@@ -748,8 +748,15 @@ local function setParent(self, parent)
 	end
 end
 
+-- Properties scripts are actually allowed to set on Terrain (others, like Decoration, are
+-- Studio-only and throw in a real game).
+local TERRAIN_WRITABLE = { Name = true, Parent = true, WaterColor = true, WaterReflectance = true, WaterTransparency = true, WaterWaveSize = true, WaterWaveSpeed = true }
+
 InstMT.__newindex = function(self, k, v)
 	local props = rawget(self, "_props")
+	if rawget(self, "_class") == "Terrain" and not TERRAIN_WRITABLE[k] then
+		error("Unable to assign property " .. tostring(k) .. ". Property is not scriptable (mock)", 2)
+	end
 	if k == "Parent" then
 		setParent(self, v)
 	elseif k == "Position" then
@@ -1102,15 +1109,21 @@ end
 
 -- ===== task library (spawned threads that yield are simply parked) =====
 
+-- Threads started with task.spawn/defer; only these are parked by task.wait (the main
+-- build runs straight through, as it would in a real server with time to spare).
+local spawned = setmetatable({}, { __mode = "k" })
+
 M.task = {
 	wait = function(t)
-		if coroutine.isyieldable() then
+		local co = coroutine.running()
+		if co and spawned[co] and coroutine.isyieldable() then
 			coroutine.yield()
 		end
 		return t or 0
 	end,
 	spawn = function(f, ...)
 		local co = if type(f) == "thread" then f else coroutine.create(f)
+		spawned[co] = true
 		local ok, err = coroutine.resume(co, ...)
 		if not ok then
 			error(err, 2)
@@ -1119,6 +1132,7 @@ M.task = {
 	end,
 	defer = function(f, ...)
 		local co = coroutine.create(f)
+		spawned[co] = true
 		local ok, err = coroutine.resume(co, ...)
 		if not ok then
 			error(err, 2)

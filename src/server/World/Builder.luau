@@ -298,9 +298,9 @@ local function scanVertical(zoneIndex: number, chars, col: number, row: number, 
 end
 
 function Builder.build(): { ZoneInfo }
-	local world = make("Folder", { Name = "World", Parent = workspace })
-	-- Animated grass blades on grassy terrain.
-	terrain.Decoration = true
+	-- The world is assembled off-screen and only parented to Workspace once it's complete, so
+	-- nothing (players, clients waiting on it) ever sees a half-built kingdom.
+	local world = make("Folder", { Name = "World" })
 	local doorsFolder = make("Folder", { Name = "Doors", Parent = world })
 	local infos: { ZoneInfo } = {}
 
@@ -402,13 +402,20 @@ function Builder.build(): { ZoneInfo }
 		end
 
 		-- Set dressing: rocks, ledges, props, lights, arches, bridges, signs and vistas.
-		CaveArt.dress(zoneIndex, chars, w, h, theme, folder)
-
-		Props.ambience(zoneIndex, theme, folder)
-		Props.lightShafts(zoneIndex, chars, theme, folder)
+		-- Decoration must never stop the level itself from existing, so it's isolated.
+		local ok, err = pcall(function()
+			CaveArt.dress(zoneIndex, chars, w, h, theme, folder)
+			Props.ambience(zoneIndex, theme, folder)
+			Props.lightShafts(zoneIndex, chars, theme, folder)
+		end)
+		if not ok then
+			warn(string.format("[Vesperdeep] Decorating %s failed (the level still works): %s", zone.id, tostring(err)))
+		end
 		infos[zoneIndex] = info
+		task.wait()
 	end
 
+	world.Parent = workspace
 	return infos
 end
 

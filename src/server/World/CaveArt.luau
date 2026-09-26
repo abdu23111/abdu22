@@ -62,6 +62,10 @@ local function part(className: string, props: { [string]: any }, collide: boolea
 		p.Parent = parent
 	end
 	partCount += 1
+	-- Building thousands of parts in one go can exceed Roblox's script time limit; breathe.
+	if partCount % 400 == 0 then
+		task.wait()
+	end
 	return p
 end
 

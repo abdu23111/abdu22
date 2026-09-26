@@ -738,6 +738,21 @@ function PlayerService.init(infos)
 		player:LoadCharacter()
 	end
 
+	-- Safety net: anyone who ever falls out of the world is put back at their bench.
+	task.spawn(function()
+		while true do
+			task.wait(0.5)
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if character and root and root.Position.Y < -60 then
+					root.AssemblyLinearVelocity = Vector3.zero
+					character:PivotTo(spawnCFrame(player))
+				end
+			end
+		end
+	end)
+
 	Players.CharacterAutoLoads = false
 	Players.PlayerAdded:Connect(onPlayer)
 	for _, player in Players:GetPlayers() do
