@@ -189,6 +189,34 @@ function Combat.init(infos, PlayerService)
 
 	-- ===== Lumen Bolt =====
 
+	-- Soul spells: a scream that bursts above you, and a dive that explodes where you land.
+	local lastSpell: { [Player]: number } = {}
+	Net.event("Spell").OnServerEvent:Connect(function(player: Player, kind: unknown)
+		if kind ~= "shriek" and kind ~= "dive" then
+			return
+		end
+		local now = os.clock()
+		if lastSpell[player] and now - lastSpell[player] < 0.4 then
+			return
+		end
+		local root = PlayerService.rootOf(player)
+		local soul = (player:GetAttribute("Soul") or 0) :: number
+		if not root or soul < Config.BOLT_COST or (player:GetAttribute("Masks") or 0) <= 0 then
+			return
+		end
+		lastSpell[player] = now
+		player:SetAttribute("Soul", soul - Config.BOLT_COST)
+		local box, size, knock
+		if kind == "shriek" then
+			box, size, knock = CFrame.new(root.Position + Vector3.new(0, 8, 0)), Vector3.new(14, 13, 10), Vector3.new(0, 1, 0)
+		else
+			box, size, knock = CFrame.new(root.Position + Vector3.new(0, -1, 0)), Vector3.new(18, 8, 10), Vector3.new(0, 1, 0)
+		end
+		local damage = math.floor(nailDamage(player) * (if kind == "dive" then 2.6 else 2.2) + 0.5)
+		strike(player, workspace:GetPartBoundsInBox(box, size, params), damage, knock, "spell", {})
+		PlayerService.invulnerable(player, if kind == "dive" then 0.5 else 0.2)
+	end)
+
 	Net.event("Bolt").OnServerEvent:Connect(function(player: Player, aim: unknown)
 		if not player:GetAttribute("HasBolt") then
 			return

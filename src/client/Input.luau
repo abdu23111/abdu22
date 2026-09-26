@@ -9,6 +9,7 @@ local Input = {
 	focusHeld = false,
 	attackHeld = false,
 	swingHeld = false,
+	cdashHeld = false,
 	stick = Vector2.zero, -- gamepad left stick
 	lookStick = Vector2.zero, -- gamepad right stick
 	touchMove = Vector2.zero,
@@ -99,8 +100,10 @@ local function press(key: Enum.KeyCode, down: boolean)
 	elseif SWING[key] then
 		Input.swingHeld = down
 		fire(if down then "swing" else "swingRelease")
-	elseif VIEW[key] and down then
-		fire("view")
+	elseif VIEW[key] then
+		-- Charge dash: hold to gather, release to launch.
+		Input.cdashHeld = down
+		fire(if down then "cdash" else "cdashRelease")
 	elseif key == Enum.KeyCode.Tab and down then
 		fire("charms")
 	elseif key == Enum.KeyCode.H and down then
@@ -301,6 +304,13 @@ if UserInputService.TouchEnabled then
 	end, function()
 		Input.focusHeld = false
 		fire("focusEnd")
+	end)
+	touchButton(gui, "CDASH", UDim2.new(1, -240, 0.45, 0), 58, function()
+		Input.cdashHeld = true
+		fire("cdash")
+	end, function()
+		Input.cdashHeld = false
+		fire("cdashRelease")
 	end)
 	touchButton(gui, "SWING", UDim2.new(1, -150, 0.45, 0), 60, function()
 		Input.swingHeld = true

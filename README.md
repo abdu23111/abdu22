@@ -68,6 +68,9 @@ Vesperdeep is a 2D side-scroller: the camera looks at the caves from the side an
 | Dash *(found later)* | Shift | R1 / B |
 | Lumen Bolt *(found later)* | R | R2 |
 | Swing from a glowing ring (hold; release or jump to let go) | G | L3 / D-pad up |
+| Charge dash (hold to gather, release to launch; jump or hit a wall to stop) | V | D-pad down |
+| Soul scream (burst above you) / soul dive (plunge and explode) | W + R / S + R in the air | Up / down + R2 |
+| Travel between benches you've rested at | Rest at a bench → Travel | |
 | Focus Soul to heal | Hold F or right click | L1 |
 | Talk / rest at bench | E | Y |
 | Charms (at a bench) | Tab | |

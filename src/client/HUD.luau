@@ -275,7 +275,7 @@ function HUD.init()
 	areaLine = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.43, 44), Size = UDim2.fromOffset(360, 2), BackgroundColor3 = TEXT, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = gui })
 
 	-- Controls panel
-	help = new("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 24, 1, -24), Size = UDim2.fromOffset(400, 226), BackgroundColor3 = Color3.fromRGB(10, 10, 16), BackgroundTransparency = 0.35, Parent = gui }, {
+	help = new("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 24, 1, -24), Size = UDim2.fromOffset(420, 250), BackgroundColor3 = Color3.fromRGB(10, 10, 16), BackgroundTransparency = 0.35, Parent = gui }, {
 		corner(UDim.new(0, 8)),
 		new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingTop = UDim.new(0, 10), PaddingRight = UDim.new(0, 14) }),
 	})
@@ -292,7 +292,8 @@ function HUD.init()
 			"<b>W + strike</b> upward   ·   <b>S + strike</b> in the air: pogo",
 			"<b>F</b> or <b>RIGHT-CLICK</b> (hold)   focus Soul to heal",
 			"<b>SHIFT</b> dash   ·   <b>R</b> Lumen Bolt   (once found)",
-			"<b>G</b> (hold) swing from glowing rings   ·   strike again quickly to combo",
+			"<b>G</b> (hold) swing   ·   <b>V</b> (hold, release) charge dash   ·   combo: strike again",
+			"<b>W + R</b> soul scream   ·   <b>S + R</b> in the air: soul dive",
 			"<b>E</b>   talk / rest    <b>TAB</b>   charms    <b>M</b>   journal",
 			"<b>H</b>   hide this panel",
 		}, "\n"),

@@ -143,6 +143,7 @@ function PlayerService.sync(player: Player)
 	player:SetAttribute("Memories", setOf(data.memories))
 	player:SetAttribute("Switches", setOf(data.switches))
 	player:SetAttribute("Visited", setOf(data.visited))
+	player:SetAttribute("Stations", setOf((data :: any).stations or {}))
 	player:SetAttribute("Bought", setOf(data.bought))
 	local masks = player:GetAttribute("Masks")
 	if typeof(masks) == "number" then
@@ -459,12 +460,22 @@ local benchSeats: { BasePart } = {}
 local tockParts: { BasePart } = {}
 local lirraParts: { BasePart } = {}
 
+-- Brief invulnerability (spells, the charge dash).
+function PlayerService.invulnerable(player: Player, seconds: number)
+	dodgeUntil[player] = math.max(dodgeUntil[player] or 0, os.clock() + seconds)
+end
+
 local function rest(player: Player, benchId: string)
 	local data = dataByPlayer[player]
 	if not data or dead[player] then
 		return
 	end
 	data.bench = benchId
+	-- Every bench rested at becomes a travel station.
+	local stations = (data :: any).stations or {}
+	;(data :: any).stations = stations
+	stations[benchId] = true
+	player:SetAttribute("Stations", setOf(stations))
 	player:SetAttribute("Masks", PlayerService.maxMasks(player))
 	PlayerService.save(player)
 	if PlayerService.onRest then
@@ -750,6 +761,23 @@ function PlayerService.init(infos)
 					character:PivotTo(spawnCFrame(player))
 				end
 			end
+		end
+	end)
+
+	-- Travel between benches you've rested at.
+	Net.event("Travel").OnServerEvent:Connect(function(player: Player, benchId: unknown)
+		local data = dataByPlayer[player]
+		local stations = data and (data :: any).stations
+		if typeof(benchId) ~= "string" or not stations or not stations[benchId] or not benchCFrames[benchId] or dead[player] then
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if character and root then
+			data.bench = benchId
+			root.AssemblyLinearVelocity = Vector3.zero
+			character:PivotTo(benchCFrames[benchId] * CFrame.Angles(0, math.rad(-90), 0))
+			player:SetAttribute("Masks", PlayerService.maxMasks(player))
 		end
 	end)
 

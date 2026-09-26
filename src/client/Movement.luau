@@ -28,6 +28,8 @@ Movement.onStep = nil :: ((Vector3) -> ())?
 Movement.onJump = nil :: (() -> ())?
 Movement.onHurt = nil :: (() -> ())?
 Movement.onWallJump = nil :: ((Vector3) -> ())?
+Movement.onDiveLand = nil :: ((Vector3) -> ())?
+Movement.onCdash = nil :: ((string, Vector3?) -> ())? -- "charge" | "ready" | "launch" | "stop" | "cancel"
 Movement.onSwing = nil :: ((Vector3?) -> ())? -- anchor when a swing starts, nil when it ends
 
 local jumpPressedAt = -1
@@ -56,6 +58,14 @@ local lastStepDust = 0
 local wallNormal: Vector3? = nil
 local swing: { anchor: Vector3, length: number }? = nil
 local swingCooldownUntil = 0
+-- Downward dive (spell) and the charge dash.
+local diving = false
+local cdashState: string? = nil -- "charging" | "flying"
+local cdashStart = 0
+local cdashDir = Vector3.xAxis
+local CDASH_CHARGE = 0.75
+local CDASH_SPEED = 115
+local CDASH_MAX = 2.4
 local swingSpent = false -- each press of the swing button catches at most one ring
 local anchors: { BasePart } = {}
 
@@ -123,6 +133,7 @@ function Movement.pogo()
 		return
 	end
 	local v = root.AssemblyLinearVelocity
+
 	root.AssemblyLinearVelocity = Vector3.new(v.X, Config.POGO_VELOCITY, v.Z)
 	usedDouble = false
 	dashReady = true
@@ -140,6 +151,16 @@ end
 -- Recoil along the facing direction (negative pushes backwards).
 function Movement.recoil(dir: number, speed: number, duration: number)
 	Movement.shove(State.facingVector * dir * speed, duration)
+end
+
+-- Plunge straight down until the ground; the callback fires on impact.
+function Movement.startDive()
+	diving = true
+	dashUntil, dodgeUntil, lockUntil = 0, 0, 0
+end
+
+function Movement.isDiving(): boolean
+	return diving
 end
 
 function Movement.setRooted(on: boolean)
@@ -337,6 +358,79 @@ local function step(dt: number)
 		end
 	end
 	local v = root.AssemblyLinearVelocity
+
+	-- The dive: straight down, fast, until the ground.
+	if diving then
+		local grounded0 = humanoid.FloorMaterial ~= Enum.Material.Air
+		if grounded0 or State.frozen() then
+			diving = false
+			root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			if grounded0 and Movement.onDiveLand then
+				Movement.onDiveLand(root.Position - Vector3.new(0, 3, 0))
+			end
+		else
+			humanoid:Move(Vector3.zero)
+			root.AssemblyLinearVelocity = Vector3.new(0, -150, 0)
+			State.action = "dive"
+			return
+		end
+	end
+
+	-- The charge dash: hold to gather (rooted), release to fly straight until a wall.
+	if cdashState == "charging" then
+		if State.frozen() then
+			cdashState = nil
+			if Movement.onCdash then
+				Movement.onCdash("cancel")
+			end
+		elseif not Input.cdashHeld then
+			if now - cdashStart >= CDASH_CHARGE then
+				cdashState = "flying"
+				cdashStart = now
+				local m = Movement.moveWorld()
+				cdashDir = if wallNormal then wallNormal elseif m.Magnitude > 0.2 then m.Unit else State.facingVector
+				root.CFrame = CFrame.lookAt(root.Position, root.Position + cdashDir)
+				Net.event("Dodge"):FireServer()
+				if Movement.onCdash then
+					Movement.onCdash("launch", cdashDir)
+				end
+			else
+				cdashState = nil
+				if Movement.onCdash then
+					Movement.onCdash("cancel")
+				end
+			end
+		else
+			humanoid:Move(Vector3.zero)
+			-- Clinging to a wall or standing still while it gathers.
+			root.AssemblyLinearVelocity = if wallNormal then Vector3.zero else Vector3.new(0, math.min(v.Y, 0), 0)
+			State.action = "charge"
+			if now - cdashStart >= CDASH_CHARGE and Movement.onCdash and not (root:GetAttribute("CdashReady")) then
+				root:SetAttribute("CdashReady", true)
+				Movement.onCdash("ready")
+			end
+			return
+		end
+	end
+	if cdashState == "flying" then
+		local hit = workspace:Raycast(root.Position, cdashDir * 3, wallParams)
+		if hit or now - cdashStart > CDASH_MAX or now - jumpPressedAt <= Config.JUMP_BUFFER or State.frozen() or Input.cdashHeld then
+			cdashState = nil
+			root:SetAttribute("CdashReady", nil)
+			Movement.shove(-cdashDir * (if hit then 20 else 0), if hit then 0.12 else 0.01)
+			root.AssemblyLinearVelocity = if hit then Vector3.new(-cdashDir.X * 20, 20, 0) else Vector3.new(cdashDir.X * 30, v.Y, 0)
+			if Movement.onCdash then
+				Movement.onCdash("stop", if hit then hit.Position else nil)
+			end
+		else
+			humanoid:Move(cdashDir)
+			humanoid.WalkSpeed = CDASH_SPEED
+			root.AssemblyLinearVelocity = cdashDir * CDASH_SPEED
+			State.action = "cdash"
+			State.invulnUntil = math.max(State.invulnUntil, now + 0.1)
+			return
+		end
+	end
 
 	if State.frozen() or rooted then
 		humanoid:Move(Vector3.zero)
@@ -604,6 +698,17 @@ function Movement.init()
 	end)
 	Input.on("dodge", function()
 		dodgeRequestedAt = os.clock()
+	end)
+	Input.on("cdash", function()
+		local root = State.root
+		if cdashState == nil and root and not State.frozen() and not rooted and not swing then
+			cdashState = "charging"
+			cdashStart = os.clock()
+			root:SetAttribute("CdashReady", nil)
+			if Movement.onCdash then
+				Movement.onCdash("charge")
+			end
+		end
 	end)
 	Input.on("swingRelease", function()
 		swingSpent = false

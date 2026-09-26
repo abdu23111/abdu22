@@ -449,6 +449,30 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
         "hem": loop_keys(0.9, (10,), (14,)),
         "nail": loop_keys(0.9, (-30,), (-30,)),
     })
+    # Soul dive: curled into a spearhead, blade pointed straight down.
+    r.clip("dive", 0.2, {
+        "root": loop_keys(0.2, (0, 0, 0, 0.9, 1.12), (0, 0, 0, 0.88, 1.14)),
+        "body": loop_keys(0.2, (-4,), (-6,)),
+        "armF": loop_keys(0.2, (-20,), (-22,)),
+        "nail": loop_keys(0.2, (-40,), (-40,)),
+        "armB": loop_keys(0.2, (60,), (64,)),
+        "legF": loop_keys(0.2, (60,), (64,)),
+        "legB": loop_keys(0.2, (50,), (54,)),
+        "hem": loop_keys(0.2, (-50,), (-58,)),
+        "antF": loop_keys(0.2, (40,), (50,)),
+        "antB": loop_keys(0.2, (42,), (52,)),
+        "head": loop_keys(0.2, (-12,), (-14,)),
+    })
+    # Soul scream: head thrown back, arms flung wide.
+    r.clip("shriek", 0.6, {
+        "head": [K(0, 0), K(0.08, 30, 0, 0.1), K(0.45, 32, 0, 0.1), K(0.6, 0)],
+        "body": [K(0, 0), K(0.06, 8, 0, -0.08, 1.06, 0.94), K(0.12, -10, 0, 0.1, 0.94, 1.08, "o"), K(0.45, -8), K(0.6, 0)],
+        "armF": [K(0, 0), K(0.1, 150), K(0.45, 155), K(0.6, 0)],
+        "armB": [K(0, 0), K(0.1, -150), K(0.45, -155), K(0.6, 0)],
+        "antF": [K(0, 0), K(0.1, -40), K(0.45, -45), K(0.6, 0)],
+        "antB": [K(0, 0), K(0.1, -42), K(0.45, -47), K(0.6, 0)],
+        "hem": [K(0, 0), K(0.12, -30), K(0.6, 0)],
+    }, loop=False, events=[[0.1, "cast"]])
     # Kicking off a wall.
     r.clip("wallJump", 0.26, {
         "body": [K(0, 10, -0.1), K(0.06, -18, 0.15, 0, 0.94, 1.08, "o"), K(0.26, 0)],

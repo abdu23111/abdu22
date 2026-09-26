@@ -79,6 +79,7 @@ local PRIORITY = {
 	attackUp = 3,
 	attackDown = 3,
 	bolt = 3,
+	shriek = 3,
 	flip = 2,
 	dodge = 2,
 	wallJump = 2,
@@ -297,6 +298,10 @@ local function locomotion(entry: Entry, root: BasePart, grounded: boolean, speed
 			return "swing", 1
 		elseif action == "push" then
 			return "push", 1
+		elseif action == "dive" then
+			return "dive", 1
+		elseif action == "cdash" then
+			return "dash", 1.2
 		elseif action == "heal" then
 			return "heal", 1
 		elseif State.charging then

@@ -360,6 +360,63 @@ function Menus.init()
 	}, {
 		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
+	-- Travel: every bench you've rested at is a station you can ride to from any other.
+	local travelFrame = panel({ Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(460, 420), Parent = gui })
+	text({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 34), TextSize = 30, Text = "TRAVEL", Parent = travelFrame })
+	local travelList = new("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(20, 56),
+		Size = UDim2.new(1, -40, 1, -120),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = travelFrame,
+	}, {
+		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	button({ Text = "Back", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(180, 40), Parent = travelFrame }, function()
+		travelFrame.Visible = false
+		charmFrame.Visible = true
+	end)
+	local function openTravel()
+		local Zones = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Zones"))
+		local HttpService = game:GetService("HttpService")
+		for _, c in travelList:GetChildren() do
+			if c:IsA("GuiButton") then
+				c:Destroy()
+			end
+		end
+		local raw = player:GetAttribute("Stations")
+		local ok, list = pcall(HttpService.JSONDecode, HttpService, if typeof(raw) == "string" then raw else "[]")
+		local count: { [string]: number } = {}
+		for i, id in (if ok then list else {}) do
+			local zoneId = string.split(id, ":")[1]
+			local name = zoneId
+			for _, z in Zones do
+				if z.id == zoneId then
+					name = z.name
+				end
+			end
+			count[name] = (count[name] or 0) + 1
+			local label = if count[name] > 1 then name .. " — bench " .. count[name] else name
+			local b = button({ Text = label, Size = UDim2.new(1, -10, 0, 40), LayoutOrder = i, Parent = travelList }, function()
+				setCharms(false)
+				travelFrame.Visible = false
+				task.spawn(function()
+					local Fade = require(script.Parent.Fade)
+					Fade.out(0.35)
+					Net.event("Travel"):FireServer(id)
+					task.wait(0.45)
+					Fade.into(0.5)
+				end)
+			end)
+			local _ = b
+		end
+		charmFrame.Visible = false
+		travelFrame.Visible = true
+	end
+	button({ Text = "Travel", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -14), Size = UDim2.fromOffset(120, 42), Parent = charmFrame }, openTravel)
 	button({ Text = "Rise from the bench", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(240, 42), Parent = charmFrame }, function()
 		setCharms(false)
 	end)

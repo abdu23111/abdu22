@@ -30,6 +30,8 @@ Net.NAMES = {
 	"Bolt",
 	"Dodge",
 	"EnterZone",
+	"Spell",
+	"Travel",
 	-- server -> client
 	"Knockback",
 	"HazardRespawn",

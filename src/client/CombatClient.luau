@@ -404,9 +404,53 @@ end
 
 -- ===== Lumen Bolt =====
 
+local SOUL = Color3.fromRGB(225, 235, 255)
+
+-- Up + spell: a scream of soul that bursts above you.
+local function shriek(root: BasePart)
+	Net.event("Spell"):FireServer("shriek")
+	Characters.action("shriek")
+	Sfx.play("roar", 1.6)
+	CameraController.shake(0.6)
+	local at = root.Position + Vector3.new(0, 3, 0)
+	for i, r in { 4, 6.5, 9 } do
+		task.delay(i * 0.05, function()
+			Fx.arc(at, 1, r, 10, 170, { color = SOUL, glow = Color3.fromRGB(150, 180, 255), thickness = 0.55, sweep = 0.05, life = 0.3, segments = 14 }, root)
+		end)
+	end
+	Fx.glitter(at + Vector3.new(0, 5, 0), SOUL, 30, 6)
+	Fx.light(at + Vector3.new(0, 5, 0), SOUL, 30, 3, 0.4)
+	Fx.sparks(at + Vector3.new(0, 2, 0), SOUL, 10, 2.5, Vector3.yAxis)
+end
+
+-- Down + spell in the air: plunge, then explode where you land.
+local function dive(root: BasePart)
+	Characters.action("jumpStart")
+	Sfx.play("dash", 0.7)
+	Movement.startDive()
+	Fx.ring(root.Position, SOUL, 4, 0.25, 0.4)
+end
+
 local function bolt()
 	local root = State.root
-	if not root or State.frozen() or focusing or not State.hasAbility("HasBolt") then
+	if not root or State.frozen() or focusing then
+		return
+	end
+	-- Direction picks the spell: up = scream, down in the air = dive, otherwise the Lumen Bolt.
+	local soul = (player:GetAttribute("Soul") or 0) :: number
+	if Input.lookUp() or (Input.lookDown() and not State.grounded) then
+		if os.clock() - lastBolt < 0.45 or soul < Config.BOLT_COST or Movement.isDiving() then
+			return
+		end
+		lastBolt = os.clock()
+		if Input.lookUp() then
+			shriek(root)
+		else
+			dive(root)
+		end
+		return
+	end
+	if not State.hasAbility("HasBolt") then
 		return
 	end
 	local now = os.clock()
@@ -681,6 +725,89 @@ function CombatClient.init()
 			end
 		end
 		Fx.puff(position, DUST, math.clamp(speed / 20, 1.5, 4.5), 0.45)
+	end
+
+	Movement.onDiveLand = function(position: Vector3)
+		Net.event("Spell"):FireServer("dive")
+		Characters.action("land", 0.8)
+		Sfx.play("impact", 0.7)
+		CameraController.shake(1)
+		Characters.hitStop(0.08)
+		Fx.groundBurst(position, SOUL, 12)
+		Fx.crack(position, SOUL, 5)
+		Fx.light(position + Vector3.new(0, 2, 0), SOUL, 36, 4, 0.5)
+		for _, s in { -1, 1 } do
+			Fx.arc(position + Vector3.new(0, 0.5, 0), s, 6, 0, 80, { color = SOUL, glow = Color3.fromRGB(150, 180, 255), thickness = 0.7, sweep = 0.06, life = 0.3 })
+		end
+		Fx.sparks(position + Vector3.new(0, 1, 0), SOUL, 14, 2.5, Vector3.yAxis)
+	end
+
+	-- The charge dash: crystals gather while held, then a streaking launch.
+	local cdashGlow: ParticleEmitter? = nil
+	local cdashTrail: RBXScriptConnection? = nil
+	local CRYSTAL = Color3.fromRGB(255, 170, 230)
+	Movement.onCdash = function(stage: string, info: Vector3?)
+		local root = State.root
+		if not root then
+			return
+		end
+		if stage == "charge" then
+			Sfx.play("charge", 0.8)
+			local e = Instance.new("ParticleEmitter")
+			e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+			e.Color = ColorSequence.new(CRYSTAL)
+			e.LightEmission = 1
+			e.Size = NumberSequence.new(0.45, 0)
+			e.Lifetime = NumberRange.new(0.3, 0.5)
+			e.Rate = 40
+			e.Speed = NumberRange.new(-8, -5)
+			e.Shape = Enum.ParticleEmitterShape.Sphere
+			e.ShapeInOut = Enum.ParticleEmitterShapeInOut.InAndOut
+			e.Parent = root
+			cdashGlow = e
+		elseif stage == "ready" then
+			Fx.glitter(root.Position, CRYSTAL, 20, 2)
+			Fx.light(root.Position, CRYSTAL, 18, 3, 0.3)
+			Characters.flash(0.5)
+			if cdashGlow then
+				cdashGlow.Rate = 110
+			end
+		elseif stage == "launch" then
+			if cdashGlow then
+				cdashGlow:Destroy()
+				cdashGlow = nil
+			end
+			local dir = info or State.facingVector
+			Sfx.play("cleave", 1.3)
+			CameraController.shake(0.5)
+			Fx.groundBurst(root.Position - Vector3.new(0, 2.6, 0), CRYSTAL, 6)
+			Fx.sparks(root.Position, CRYSTAL, 12, 2.5, -dir)
+			local last = 0
+			cdashTrail = RunService.RenderStepped:Connect(function()
+				local now = os.clock()
+				if now - last > 0.035 and State.root then
+					last = now
+					Fx.afterimage(Characters.localRig(), CRYSTAL, 0.55, 0.22)
+					Fx.sparks(State.root.Position - dir * 2, CRYSTAL, 2, 1.5, -dir)
+				end
+			end)
+		else
+			if cdashGlow then
+				cdashGlow:Destroy()
+				cdashGlow = nil
+			end
+			if cdashTrail then
+				cdashTrail:Disconnect()
+				cdashTrail = nil
+			end
+			if stage == "stop" and info then
+				-- Slammed into a wall.
+				Sfx.play("impact", 1)
+				CameraController.shake(0.8)
+				Fx.impact(info, -State.facingVector, CRYSTAL, true)
+				Fx.debris(info, 6, nil, 4)
+			end
+		end
 	end
 
 	Movement.onWallJump = function(normal: Vector3)
