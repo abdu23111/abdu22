@@ -376,15 +376,21 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
         "armF": [K(0, 0), K(0.1, -80), K(0.34, 0)],
     }, loop=False)
     # Clinging to a wall (facing away from it): pressed flat, sliding.
-    r.clip("wall", 0.4, {
-        "body": loop_keys(0.4, (8, -0.2), (9, -0.22)),
-        "armB": loop_keys(0.4, (-85,), (-90,)),
-        "armF": loop_keys(0.4, (-120,), (-124,)),
-        "legB": loop_keys(0.4, (-40,), (-44,)),
-        "legF": loop_keys(0.4, (20,), (24,)),
-        "hem": loop_keys(0.4, (-20,), (-24,)),
-        "antF": loop_keys(0.4, (-20,), (-14,)),
-        "antB": loop_keys(0.4, (-18,), (-12,)),
+    # Wall slide: back to the wall, one claw dragging on the stone, knees bent, cloak
+    # streaming upward, a small judder as it scrapes down.
+    r.clip("wall", 0.24, {
+        "root": loop_keys(0.24, (0, -0.04, 0), (0, 0.03, 0.03), (0, -0.02, -0.02)),
+        "hips": loop_keys(0.24, (0, 0, -0.2, 1.04, 0.95), (0, 0, -0.22, 1.05, 0.94)),
+        "body": loop_keys(0.24, (10, -0.25), (12, -0.27), (9, -0.24)),
+        "armB": loop_keys(0.24, (-140,), (-146,), (-138,)),
+        "armF": loop_keys(0.24, (40,), (46,), (38,)),
+        "nail": loop_keys(0.24, (-20,), (-20,), (-20,)),
+        "legB": loop_keys(0.24, (-55,), (-60,), (-52,)),
+        "legF": loop_keys(0.24, (35,), (40,), (33,)),
+        "hem": loop_keys(0.24, (-38,), (-44,), (-36,)),
+        "head": loop_keys(0.24, (-6,), (-8,), (-5,)),
+        "antF": loop_keys(0.24, (-30,), (-24,), (-32,)),
+        "antB": loop_keys(0.24, (-28,), (-22,), (-30,)),
     })
     # ---- Transitions and variations -------------------------------------------------
     # Idle variation: glances toward the viewer, then back over the shoulder, antennae perking.

@@ -125,7 +125,7 @@ Eight regions, linked in loops so later abilities open shortcuts back through ea
 |---|---|---|---|
 | **Ashen Burrows** | Ember-lit caves where the kingdom began | **Gravelmaw, the Tunneling Mother** | **Drift Cloak** (dash) |
 | **Glimmerdeep Mines** | Violet crystal caverns that hum with spilled memories | **Quartzelle, the Facet Matron** | **Cleaving Arc** (charged slash that breaks crystal seals) |
-| **Mothlight Ruins** | The fallen capital, pale lamps in silent windows | **Sir Vantis, the Hollow Sentinel** | **Thorn Claws** (wall cling and wall jump) |
+| **Mothlight Ruins** | The fallen capital, pale lamps in silent windows | **Sir Vantis, the Hollow Sentinel** | **Thorn Claws** (a memento; wall sliding and wall jumping are available from the start) |
 | **Drowned Archive** | A flooded library of every forgotten word | **Murrow, Archivist of Drowned Words** | **Lumen Bolt** (soul spell that wakes sigils) |
 | **Verdant Hush** | A glowing fungal garden that listens | **The Thornwidow, Weaver of Wings** | **Veil Wings** (double jump) |
 | **The Hollowroot** *(secret)* | A monochrome abyss of abandoned lanterns | **The Hollow Echo, All Who Turned Back** | The true ending |

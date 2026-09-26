@@ -383,7 +383,8 @@ local function step(dt: number)
 
 	-- Wall cling: jump into a rough wall while holding toward it.
 	wallNormal = nil
-	if State.hasAbility("HasClaws") and not grounded and not dashing and not locked and move.Magnitude > 0.3 then
+	-- Wall slide and wall jump are always available (the Thorn Claws are no longer needed).
+	if not grounded and not dashing and not locked and move.Magnitude > 0.3 then
 		local hit = workspace:Raycast(root.Position, move.Unit * 2.2, wallParams)
 		if hit and math.abs(hit.Normal.Y) < 0.4 and not hit.Instance:GetAttribute("NoCling") then
 			wallNormal = flat(hit.Normal)

@@ -552,8 +552,20 @@ function CombatClient.init()
 	Input.on("focusStart", focus)
 	Input.on("lock", toggleLock)
 
+	local lastScrape = 0
 	RunService.RenderStepped:Connect(function()
 		local now = os.clock()
+		-- Wall slide: dust and sparks scraped off the stone where the claw drags.
+		if State.action == "wall" and State.root and now - lastScrape > 0.07 then
+			lastScrape = now
+			local root = State.root
+			local wallSide = -State.facingVector
+			local contact = root.Position + wallSide * 1.4 + Vector3.new(0, 1.2, 0)
+			Fx.puff(contact, Color3.fromRGB(170, 160, 150), 1, 0.35)
+			if math.random() < 0.6 then
+				Fx.sparks(contact, Color3.fromRGB(255, 225, 170), 2, 0.6, Vector3.new(0, 1, 0) - wallSide * 0.5)
+			end
+		end
 		if queuedAt and now >= nextAttackAt then
 			if now - queuedAt <= BUFFER + 0.1 then
 				attack()
