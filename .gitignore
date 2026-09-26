@@ -2,3 +2,7 @@
 .settings
 salesforce.schema
 Referenced Packages
+sourcemap.json
+*.rbxl.lock
+*.rbxlx.lock
+__pycache__/

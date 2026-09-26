@@ -1,0 +1,60 @@
+{
+  "name": "Vesperdeep",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "CharacterUseJumpPower": true,
+        "CharacterJumpPower": 60,
+        "CharacterWalkSpeed": 22,
+        "CameraMaxZoomDistance": 400,
+        "CameraMinZoomDistance": 0.5
+      },
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+    "Workspace": {
+      "$properties": {
+        "Gravity": 196.2,
+        "StreamingEnabled": false
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "ClockTime": 0,
+        "Brightness": 1,
+        "GlobalShadows": true,
+        "Ambient": [
+          0.16,
+          0.18,
+          0.24
+        ],
+        "OutdoorAmbient": [
+          0.12,
+          0.13,
+          0.18
+        ],
+        "FogColor": [
+          0.05,
+          0.06,
+          0.09
+        ],
+        "FogStart": 70,
+        "FogEnd": 260
+      }
+    }
+  }
+}

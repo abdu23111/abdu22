@@ -1,0 +1,537 @@
+-- Shape-building helpers used by the Builder: thorns, gates, benches, NPCs, pickups,
+-- the parallax backdrop, and ambient mist / motes / lights.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
+local Grid = require(Shared.Grid)
+
+local T = Config.TILE
+local DEPTH = Config.DEPTH
+
+local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
+local SPARKLE = "rbxasset://textures/particles/sparkles_main.dds"
+
+local Props = {}
+
+function Props.make(className: string, props: { [string]: any }): any
+	local inst = Instance.new(className)
+	local parent = props.Parent
+	for key, value in props do
+		if key ~= "Parent" then
+			(inst :: any)[key] = value
+		end
+	end
+	-- Ball parts are always perfectly round, so stretched "balls" become sphere meshes.
+	local size = props.Size
+	if props.Shape == Enum.PartType.Ball and typeof(size) == "Vector3" and not (size.X == size.Y and size.Y == size.Z) then
+		inst.Shape = Enum.PartType.Block
+		inst.Size = size
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = Enum.MeshType.Sphere
+		mesh.Parent = inst
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+local make = Props.make
+
+-- Non-interactive scenery part.
+local function deco(props: { [string]: any }): BasePart
+	props.Anchored = true
+	props.CanCollide = false
+	props.CanQuery = false
+	props.CanTouch = false
+	props.CastShadow = false
+	if props.Material == nil then
+		props.Material = Enum.Material.SmoothPlastic
+	end
+	return make(props.ClassName or "Part", props)
+end
+
+local function part(className: string, props: { [string]: any }): BasePart
+	props.ClassName = nil
+	local p = make(className, props)
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	if props.Material == nil then
+		p.Material = Enum.Material.SmoothPlastic
+	end
+	return p
+end
+
+-- A flat triangle facing the camera, built from two wedges. `base` is the centre of its base edge.
+function Props.triangle(base: Vector3, width: number, height: number, thickness: number, pointDown: boolean, color: Color3, parent: Instance, material: Enum.Material?)
+	local hw = width / 2
+	local dir = if pointDown then -1 else 1
+	local y = base.Y + dir * height / 2
+	for side = -1, 1, 2 do
+		local towardCenter = -side
+		local x = base.X + side * hw / 2
+		local cf
+		if pointDown then
+			cf = CFrame.new(x, y, base.Z) * CFrame.Angles(0, 0, math.pi) * CFrame.Angles(0, math.rad(-90 * towardCenter), 0)
+		else
+			cf = CFrame.new(x, y, base.Z) * CFrame.Angles(0, math.rad(90 * towardCenter), 0)
+		end
+		part("WedgePart", {
+			Size = Vector3.new(thickness, height, hw),
+			CFrame = cf,
+			Color = color,
+			Material = material,
+			Parent = parent,
+		})
+	end
+end
+
+function Props.thorn(base: Vector3, height: number, parent: Instance)
+	Props.triangle(base, T * 0.5, height, 3, false, Color3.fromRGB(210, 205, 215), parent)
+	Props.triangle(base + Vector3.new(T * 0.25, 0, -2.5), T * 0.45, height * 0.8, 3, false, Color3.fromRGB(120, 116, 128), parent)
+end
+
+function Props.edgeTuft(theme, pos: Vector3, rng: Random, parent: Instance)
+	if theme.decor == "forest" then
+		for i = 1, rng:NextInteger(2, 4) do
+			part("Part", {
+				Size = Vector3.new(0.25, rng:NextNumber(0.8, 2.2), 0.25),
+				CFrame = CFrame.new(pos + Vector3.new(i * 0.35 - 0.8, 0.6, 0)) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-25, 25))),
+				Color = theme.rim:Lerp(Color3.new(1, 1, 1), rng:NextNumber(0, 0.2)),
+				Parent = parent,
+			})
+		end
+	elseif theme.decor == "temple" then
+		part("Part", {
+			Size = Vector3.new(0.6, 0.6, 0.3),
+			CFrame = CFrame.new(pos + Vector3.new(0, 0.25, 0)) * CFrame.Angles(0, 0, math.rad(45)),
+			Color = theme.rim,
+			Material = Enum.Material.Neon,
+			Transparency = 0.4,
+			Parent = parent,
+		})
+	else
+		part("Part", {
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.one * rng:NextNumber(0.6, 1.4),
+			Position = pos + Vector3.new(0, 0.2, 0),
+			Color = theme.rock:Lerp(theme.rim, rng:NextNumber(0.1, 0.5)),
+			Parent = parent,
+		})
+	end
+end
+
+function Props.hanging(theme, pos: Vector3, rng: Random, parent: Instance)
+	if theme.decor == "forest" then
+		local len = rng:NextNumber(2, 7)
+		part("Part", {
+			Size = Vector3.new(0.3, len, 0.3),
+			Position = pos - Vector3.new(0, len / 2, 0),
+			Color = theme.rim:Lerp(Color3.new(0, 0, 0), 0.4),
+			Parent = parent,
+		})
+		if rng:NextNumber() < 0.35 then
+			part("Part", {
+				Shape = Enum.PartType.Ball,
+				Size = Vector3.one * 0.7,
+				Position = pos - Vector3.new(0, len, 0),
+				Color = theme.accent,
+				Material = Enum.Material.Neon,
+				Parent = parent,
+			})
+		end
+	elseif theme.decor == "city" then
+		local len = rng:NextNumber(1.5, 5)
+		part("Part", {
+			Size = Vector3.new(0.15, len, 0.15),
+			Position = pos - Vector3.new(0, len / 2, 0),
+			Color = Color3.fromRGB(20, 22, 30),
+			Parent = parent,
+		})
+	elseif theme.decor == "temple" then
+		if rng:NextNumber() < 0.4 then
+			local len = rng:NextNumber(3, 6)
+			part("Part", {
+				Size = Vector3.new(1.6, len, 0.1),
+				Position = pos - Vector3.new(0, len / 2, -0.5),
+				Color = Color3.fromRGB(120, 36, 44),
+				Parent = parent,
+			})
+		end
+	else
+		Props.triangle(pos, rng:NextNumber(1.2, 2.6), rng:NextNumber(1.5, 4), 2, true, theme.rock:Lerp(theme.rim, 0.15), parent)
+	end
+end
+
+-- Boss gate: invisible and passable until closed.
+function Props.gate(center: Vector3, size: Vector3, theme, parent: Instance): BasePart
+	local gate = make("Part", {
+		Name = "BossGate",
+		Anchored = true,
+		CanCollide = false,
+		Transparency = 1,
+		Size = Vector3.new(size.X * 0.6, size.Y, DEPTH),
+		Position = center,
+		Color = Color3.fromRGB(20, 20, 26),
+		Parent = parent,
+	})
+	for i = -1, 1 do
+		part("Part", {
+			Name = "Bar",
+			Size = Vector3.new(0.5, size.Y, 0.5),
+			Position = center + Vector3.new(i * 1.1, 0, DEPTH / 2 - 1),
+			Color = theme.rim:Lerp(Color3.new(0, 0, 0), 0.5),
+			Transparency = 1,
+			Parent = gate,
+		})
+	end
+	return gate
+end
+
+function Props.setGate(gate: BasePart, closed: boolean)
+	gate.CanCollide = closed
+	gate.Transparency = if closed then 0.6 else 1
+	for _, bar in gate:GetChildren() do
+		if bar:IsA("BasePart") then
+			bar.Transparency = if closed then 0 else 1
+		end
+	end
+end
+
+local function prompt(parent: Instance, action: string, object: string)
+	return make("ProximityPrompt", {
+		ActionText = action,
+		ObjectText = object,
+		KeyboardKeyCode = Enum.KeyCode.E,
+		GamepadKeyCode = Enum.KeyCode.ButtonY,
+		HoldDuration = 0,
+		MaxActivationDistance = 9,
+		RequiresLineOfSight = false,
+		Parent = parent,
+	})
+end
+
+function Props.bench(id: string, floor: Vector3, theme, parent: Instance)
+	local model = make("Model", { Name = "Bench", Parent = parent })
+	model:SetAttribute("BenchId", id)
+	local z = -2
+	local wood = Color3.fromRGB(70, 52, 44)
+	local seat = part("Part", { Name = "Seat", Size = Vector3.new(7, 0.6, 2.6), Position = floor + Vector3.new(0, 1.7, z), Color = wood, Parent = model })
+	part("Part", { Size = Vector3.new(7, 2.4, 0.4), Position = floor + Vector3.new(0, 3.1, z - 1.2), Color = wood, Parent = model })
+	for _, x in { -3, 3 } do
+		part("Part", { Size = Vector3.new(0.5, 1.7, 2), Position = floor + Vector3.new(x, 0.85, z), Color = wood:Lerp(Color3.new(0, 0, 0), 0.3), Parent = model })
+	end
+	part("Part", { Size = Vector3.new(0.3, 7, 0.3), Position = floor + Vector3.new(4.5, 3.5, z - 1), Color = Color3.fromRGB(30, 30, 36), Parent = model })
+	local lamp = part("Part", {
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.one * 1.3,
+		Position = floor + Vector3.new(4.5, 7.3, z - 1),
+		Color = Color3.fromRGB(255, 200, 130),
+		Material = Enum.Material.Neon,
+		Parent = model,
+	})
+	make("PointLight", { Range = 20, Brightness = 1.6, Color = Color3.fromRGB(255, 190, 120), Shadows = true, Parent = lamp })
+	model.PrimaryPart = seat
+	local p = prompt(seat, "Rest", "Bench")
+	p:SetAttribute("BenchId", id)
+end
+
+local NPC_LOOKS = {
+	wick = { body = Color3.fromRGB(196, 170, 128), extra = "flame" },
+	tock = { body = Color3.fromRGB(160, 104, 60), extra = "gear" },
+	ilo = { body = Color3.fromRGB(70, 112, 80), extra = "moss" },
+	sael = { body = Color3.fromRGB(226, 220, 204), extra = "halo" },
+}
+
+function Props.npc(id: string, name: string, isTablet: boolean, floor: Vector3, theme, parent: Instance)
+	local model = make("Model", { Name = "NPC_" .. id, Parent = parent })
+	model:SetAttribute("NpcId", id)
+	local z = -1.5
+	local anchor
+	if isTablet then
+		anchor = part("Part", { Size = Vector3.new(3.2, 4.6, 1), Position = floor + Vector3.new(0, 2.3, z), Color = theme.rock:Lerp(theme.rim, 0.25), Material = Enum.Material.Slate, Parent = model })
+		for i = 1, 3 do
+			part("Part", {
+				Size = Vector3.new(2 - i * 0.3, 0.2, 0.1),
+				Position = floor + Vector3.new(0, 3.6 - i * 0.8, z + 0.55),
+				Color = theme.accent,
+				Material = Enum.Material.Neon,
+				Transparency = 0.3,
+				Parent = model,
+			})
+		end
+		make("PointLight", { Range = 9, Brightness = 0.6, Color = theme.accent, Parent = anchor })
+		prompt(anchor, "Read", name)
+	else
+		local look = NPC_LOOKS[id] or { body = Color3.fromRGB(120, 120, 130) }
+		anchor = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(3.2, 4, 3), Position = floor + Vector3.new(0, 2, z), Color = look.body, Parent = model })
+		local head = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 2.5, Position = floor + Vector3.new(0, 4.6, z), Color = Color3.fromRGB(236, 234, 226), Parent = model })
+		for _, x in { -0.5, 0.5 } do
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(0.55, 0.8, 0.3), Position = head.Position + Vector3.new(x, 0, 1.15), Color = Color3.fromRGB(10, 10, 14), Parent = model })
+		end
+		if look.extra == "flame" then
+			local flame = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(0.7, 1.3, 0.7), Position = head.Position + Vector3.new(0, 1.8, 0), Color = Color3.fromRGB(255, 180, 80), Material = Enum.Material.Neon, Parent = model })
+			make("PointLight", { Range = 14, Brightness = 1.4, Color = Color3.fromRGB(255, 170, 90), Parent = flame })
+			part("Part", { Size = Vector3.new(0.4, 0.7, 0.4), Position = head.Position + Vector3.new(0, 1.2, 0), Color = Color3.fromRGB(240, 230, 210), Parent = model })
+		elseif look.extra == "gear" then
+			part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 3.4, 3.4), CFrame = CFrame.new(anchor.Position + Vector3.new(0, 0.6, -1.6)) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(200, 160, 80), Material = Enum.Material.Metal, Parent = model })
+			make("PointLight", { Range = 10, Brightness = 0.8, Color = Color3.fromRGB(255, 200, 140), Parent = anchor })
+		elseif look.extra == "moss" then
+			for i = 1, 5 do
+				part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 0.9, Position = anchor.Position + Vector3.new(math.cos(i) * 1.4, 0.8 + math.sin(i * 2) * 0.6, 1), Color = theme.accent, Material = Enum.Material.Neon, Transparency = 0.3, Parent = model })
+			end
+			make("PointLight", { Range = 10, Brightness = 0.8, Color = theme.accent, Parent = anchor })
+		elseif look.extra == "halo" then
+			part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.15, 2.8, 2.8), CFrame = CFrame.new(head.Position + Vector3.new(0, 0.2, -0.8)) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(255, 220, 150), Material = Enum.Material.Neon, Parent = model })
+			make("PointLight", { Range = 12, Brightness = 1, Color = Color3.fromRGB(255, 220, 150), Parent = head })
+		end
+		for _, x in { -0.6, 0.6 } do
+			part("Part", { Size = Vector3.new(0.2, 1.4, 0.2), CFrame = CFrame.new(head.Position + Vector3.new(x, 1.3, 0)) * CFrame.Angles(0, 0, math.rad(-x * 30)), Color = Color3.fromRGB(236, 234, 226), Parent = model })
+		end
+		prompt(anchor, "Listen", name)
+	end
+	model.PrimaryPart = anchor
+end
+
+function Props.pickup(itemId: string, kind: string, id: string, pos: Vector3, color: Color3, parent: Instance): BasePart
+	local p = make("Part", {
+		Name = "Pickup",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		Size = Vector3.new(1.6, 1.6, 1.6),
+		CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(45)),
+		Color = color,
+		Material = Enum.Material.Neon,
+		Shape = if kind == "heart" then Enum.PartType.Ball else Enum.PartType.Block,
+		Parent = parent,
+	})
+	p:SetAttribute("ItemId", itemId)
+	p:SetAttribute("Kind", kind)
+	p:SetAttribute("Id", id)
+	make("PointLight", { Range = 12, Brightness = 1.2, Color = color, Parent = p })
+	make("ParticleEmitter", {
+		Texture = SPARKLE,
+		Color = ColorSequence.new(color),
+		LightEmission = 1,
+		Size = NumberSequence.new(0.4, 0),
+		Lifetime = NumberRange.new(0.8, 1.4),
+		Rate = 8,
+		Speed = NumberRange.new(1, 2),
+		SpreadAngle = Vector2.new(180, 180),
+		Parent = p,
+	})
+	return p
+end
+
+function Props.altar(floor: Vector3, parent: Instance)
+	local model = make("Model", { Name = "Altar", Parent = parent })
+	local gold = Color3.fromRGB(220, 186, 110)
+	part("Part", { Size = Vector3.new(6, 1, 4), Position = floor + Vector3.new(0, 0.5, -2), Color = gold, Material = Enum.Material.Marble, Parent = model })
+	part("Part", { Size = Vector3.new(2.4, 3.4, 2.4), Position = floor + Vector3.new(0, 2.7, -2), Color = gold:Lerp(Color3.new(0, 0, 0), 0.3), Material = Enum.Material.Marble, Parent = model })
+	local lamp = part("Part", {
+		Name = "Lamp",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.one * 3,
+		Position = floor + Vector3.new(0, 5.8, -2),
+		Color = Color3.fromRGB(60, 56, 50),
+		Material = Enum.Material.Glass,
+		Transparency = 0.2,
+		Parent = model,
+	})
+	make("PointLight", { Name = "LampLight", Range = 60, Brightness = 0, Color = Color3.fromRGB(255, 210, 140), Parent = lamp })
+	model.PrimaryPart = lamp
+	prompt(lamp, "Kindle the Lantern", "Great Lamp")
+end
+
+-- ===== Backdrop =====
+
+local function silhouette(style: string, x: number, maxY: number, z: number, s: number, color: Color3, rng: Random, parent: Instance, windowColor: Color3?)
+	if style == "caves" then
+		local r = rng:NextNumber()
+		if r < 0.45 then
+			Props.triangle(Vector3.new(x, -20, z), rng:NextNumber(10, 24) * s, rng:NextNumber(35, 95) * s, 2, false, color, parent)
+		elseif r < 0.85 then
+			Props.triangle(Vector3.new(x, maxY + 20, z), rng:NextNumber(10, 22) * s, rng:NextNumber(25, 70) * s, 2, true, color, parent)
+		else
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * rng:NextNumber(18, 40) * s, Position = Vector3.new(x, rng:NextNumber(-10, 10), z), Color = color, Parent = parent })
+		end
+	elseif style == "city" then
+		local w = rng:NextNumber(12, 26) * s
+		local h = rng:NextNumber(30, 100) * s
+		part("Part", { Size = Vector3.new(w, h, 2), Position = Vector3.new(x, -10 + h / 2, z), Color = color, Parent = parent })
+		if rng:NextNumber() < 0.6 then
+			Props.triangle(Vector3.new(x, -10 + h, z), w * 1.1, w * rng:NextNumber(0.5, 1.2), 2, false, color, parent)
+		else
+			part("Part", { Size = Vector3.new(w * 0.2, h * 0.4, 2), Position = Vector3.new(x, -10 + h * 1.2, z), Color = color, Parent = parent })
+		end
+		if windowColor then
+			for _ = 1, rng:NextInteger(1, 4) do
+				part("Part", {
+					Size = Vector3.new(1.4 * s, 2.4 * s, 0.2),
+					Position = Vector3.new(x + rng:NextNumber(-w / 3, w / 3), -10 + h * rng:NextNumber(0.3, 0.9), z + 1.2),
+					Color = windowColor,
+					Material = Enum.Material.Neon,
+					Transparency = rng:NextNumber(0.5, 0.8),
+					Parent = parent,
+				})
+			end
+		end
+	elseif style == "forest" then
+		local w = rng:NextNumber(3, 9) * s
+		part("Part", {
+			Size = Vector3.new(w, maxY + 80, 2),
+			CFrame = CFrame.new(x, maxY / 2, z) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-6, 6))),
+			Color = color,
+			Parent = parent,
+		})
+		for _ = 1, rng:NextInteger(1, 3) do
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(rng:NextNumber(20, 40), rng:NextNumber(12, 22), 2) * s, Position = Vector3.new(x + rng:NextNumber(-12, 12) * s, maxY * rng:NextNumber(0.55, 1.05), z), Color = color, Parent = parent })
+		end
+		if windowColor and rng:NextNumber() < 0.5 then
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2 * s, Position = Vector3.new(x + rng:NextNumber(-8, 8), maxY * rng:NextNumber(0.1, 0.8), z + 1.2), Color = windowColor, Material = Enum.Material.Neon, Transparency = 0.4, Parent = parent })
+		end
+	else -- temple
+		local r = rng:NextNumber()
+		if r < 0.55 then
+			local w = rng:NextNumber(5, 9) * s
+			local h = maxY + 40
+			part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, w, w), CFrame = CFrame.new(x, h / 2 - 20, z) * CFrame.Angles(0, 0, math.rad(90)), Color = color, Parent = parent })
+			part("Part", { Size = Vector3.new(w * 1.6, w * 0.5, 2.5), Position = Vector3.new(x, maxY * rng:NextNumber(0.2, 0.5), z), Color = color, Parent = parent })
+		else
+			-- A praying moth statue: body, head and two folded wings.
+			local base = Vector3.new(x, rng:NextNumber(-5, 20), z)
+			local sz = rng:NextNumber(14, 26) * s
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(sz * 0.35, sz, 2), Position = base + Vector3.new(0, sz * 0.5, 0), Color = color, Parent = parent })
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(sz * 0.3, sz * 0.3, 2), Position = base + Vector3.new(0, sz * 1.05, 0), Color = color, Parent = parent })
+			Props.triangle(base + Vector3.new(-sz * 0.35, sz * 0.2, 0), sz * 0.6, sz * 1.1, 2, false, color, parent)
+			Props.triangle(base + Vector3.new(sz * 0.35, sz * 0.2, 0), sz * 0.6, sz * 1.1, 2, false, color, parent)
+		end
+	end
+end
+
+function Props.backdrop(zoneIndex: number, theme, folder: Folder)
+	local backdrop = make("Folder", { Name = "Backdrop", Parent = folder })
+	local rng = Random.new(zoneIndex * 104729)
+	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
+	local width = maxX - minX
+
+	make("Part", {
+		Name = "Void",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Size = Vector3.new(width + 900, maxY + 500, 2),
+		Position = Vector3.new(minX + width / 2, maxY / 2, -180),
+		Color = theme.fog,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = backdrop,
+	})
+
+	local layers = {
+		{ z = -DEPTH / 2 - 14, scale = 0.9, spacing = 20 },
+		{ z = -60, scale = 1.5, spacing = 30 },
+		{ z = -115, scale = 2.4, spacing = 44 },
+	}
+	for i, layer in layers do
+		local color = theme.far[i]
+		local margin = 60 + i * 50
+		local x = minX - margin
+		while x < maxX + margin do
+			local tint = color:Lerp(theme.accent, rng:NextNumber(0, 0.04))
+			silhouette(theme.decor, x, maxY, layer.z, layer.scale, tint, rng, backdrop, if i < 3 then theme.accent else nil)
+			x += rng:NextNumber(0.6, 1.4) * layer.spacing
+		end
+	end
+end
+
+local function glowProp(style: string, floor: Vector3, theme, rng: Random, parent: Instance)
+	local z = -3.5
+	local light
+	if style == "caves" then
+		light = part("Part", { Size = Vector3.new(1, 2.2, 1), CFrame = CFrame.new(floor + Vector3.new(0, 0.8, z)) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-25, 25))), Color = theme.accent, Material = Enum.Material.Neon, Parent = parent })
+		part("Part", { Size = Vector3.new(0.7, 1.4, 0.7), CFrame = CFrame.new(floor + Vector3.new(0.8, 0.5, z)) * CFrame.Angles(0, 0, math.rad(-30)), Color = theme.accent, Material = Enum.Material.Neon, Parent = parent })
+	elseif style == "city" then
+		part("Part", { Size = Vector3.new(0.4, 8, 0.4), Position = floor + Vector3.new(0, 4, z), Color = Color3.fromRGB(24, 26, 36), Parent = parent })
+		part("Part", { Size = Vector3.new(2, 0.3, 0.3), Position = floor + Vector3.new(0.8, 8, z), Color = Color3.fromRGB(24, 26, 36), Parent = parent })
+		light = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2, Position = floor + Vector3.new(1.6, 7.3, z), Color = theme.accent, Material = Enum.Material.Neon, Parent = parent })
+	elseif style == "forest" then
+		local h = rng:NextNumber(1.5, 3.5)
+		part("Part", { Size = Vector3.new(0.5, h, 0.5), Position = floor + Vector3.new(0, h / 2, z), Color = Color3.fromRGB(200, 220, 200), Parent = parent })
+		light = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(2.6, 1.2, 2.6), Position = floor + Vector3.new(0, h, z), Color = theme.accent, Material = Enum.Material.Neon, Parent = parent })
+	else
+		part("Part", { Size = Vector3.new(1, 2.5, 1), Position = floor + Vector3.new(0, 1.25, z), Color = theme.rim:Lerp(Color3.new(0, 0, 0), 0.4), Parent = parent })
+		part("Part", { Size = Vector3.new(2.4, 0.6, 2.4), Position = floor + Vector3.new(0, 2.8, z), Color = theme.rim, Material = Enum.Material.Metal, Parent = parent })
+		light = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(1.2, 1.8, 1.2), Position = floor + Vector3.new(0, 3.8, z), Color = Color3.fromRGB(255, 190, 110), Material = Enum.Material.Neon, Parent = parent })
+	end
+	make("PointLight", { Range = 16, Brightness = 1.1, Color = light.Color, Shadows = false, Parent = light })
+end
+
+function Props.ambience(zoneIndex: number, theme, floorSpots: { Vector3 }, folder: Folder)
+	local ambience = make("Folder", { Name = "Ambience", Parent = folder })
+	local rng = Random.new(zoneIndex * 31337)
+	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
+	local width = maxX - minX
+
+	local lastX = -math.huge
+	for _, spot in floorSpots do
+		if spot.X - lastX > 26 and rng:NextNumber() < 0.5 then
+			glowProp(theme.decor, spot, theme, rng, ambience)
+			lastX = spot.X
+		end
+	end
+
+	local mistColor = theme.fog:Lerp(Color3.new(1, 1, 1), 0.35)
+	for _, frac in { 0.12, 0.45, 0.78 } do
+		local holder = deco({ Name = "Mist", Transparency = 1, Size = Vector3.new(width, 10, 26), Position = Vector3.new(minX + width / 2, maxY * frac, -3), Parent = ambience })
+		make("ParticleEmitter", {
+			Texture = SMOKE,
+			Color = ColorSequence.new(mistColor),
+			LightInfluence = 0.4,
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.4, 0.86),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Size = NumberSequence.new(14, 22),
+			Lifetime = NumberRange.new(10, 16),
+			Rate = width / 45,
+			Speed = NumberRange.new(0.5, 1.6),
+			SpreadAngle = Vector2.new(180, 20),
+			Rotation = NumberRange.new(0, 360),
+			RotSpeed = NumberRange.new(-6, 6),
+			EmissionDirection = Enum.NormalId.Right,
+			Shape = Enum.ParticleEmitterShape.Box,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+			Parent = holder,
+		})
+	end
+
+	local motes = deco({ Name = "Motes", Transparency = 1, Size = Vector3.new(width, maxY, 20), Position = Vector3.new(minX + width / 2, maxY / 2, 0), Parent = ambience })
+	make("ParticleEmitter", {
+		Texture = SPARKLE,
+		Color = ColorSequence.new(theme.accent),
+		LightEmission = 1,
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.3, 0.3),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Size = NumberSequence.new(0.35),
+		Lifetime = NumberRange.new(6, 10),
+		Rate = width / 18,
+		Speed = NumberRange.new(0.3, 1.2),
+		SpreadAngle = Vector2.new(180, 180),
+		Acceleration = Vector3.new(0, 0.25, 0),
+		Shape = Enum.ParticleEmitterShape.Box,
+		ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+		Parent = motes,
+	})
+end
+
+return Props
