@@ -209,6 +209,7 @@ Other letters, such as NPCs, charms, memories, bosses and Geo caches, are define
 ```
 python tools/harness/run.py      # build every region headlessly; prints part/light counts, fails on script errors
 python tools/harness/render.py   # screenshots of every region into previews/world/
+python tools/harness/check.py    # verifies no terrain or collidable prop blocks any walkable path
 ```
 
 The renders are approximations (no Roblox terrain textures, simplified lighting), but they show exactly what the builder places, and `run.py` catches runtime errors in the level code before you open Studio. Needs `luau`, Python with `numpy scipy scikit-image`, and Node with `playwright` (`npm install` in `tools/harness/web`).

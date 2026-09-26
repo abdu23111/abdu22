@@ -276,6 +276,12 @@ local function buildDoors(zoneIndex: number, chars, w: number, h: number, theme,
 			door:SetAttribute("Zone", zoneIndex)
 			door:SetAttribute("Arrival", arrival)
 			door:SetAttribute("Inward", inward)
+			-- Only a portal-sized opening stays open; rock fills the rest of the end wall.
+			local open = Props.DOOR_WIDTH / 2
+			local fillDepth = hz + WALL - open
+			for _, side in { -1, 1 } do
+				terrain:FillBlock(CFrame.new(center.X, center.Y, side * (open + fillDepth / 2 + 1)), Vector3.new(size.X, size.Y + 2, fillDepth), theme.wall)
+			end
 			Props.doorway(center, size, inward, theme, doorsFolder)
 		end
 	end

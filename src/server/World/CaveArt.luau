@@ -691,11 +691,15 @@ local function tower(base: Vector3, h: number, w: number, color: Color3, windowC
 	end
 end
 
-local function backdrop(center: Vector3, side: number, width: number, height: number, hzMin: number)
+-- How far from the corridor's centre the distant scenery may start: behind the widest stretch
+-- of cave wall anywhere near the window, so it can never intrude into playable space.
+local vistaStart = 0
+
+local function backdrop(center: Vector3, side: number, width: number, height: number, _hzMin: number)
 	-- The far cavern: a floor well below the window, a back wall and a roof, all terrain.
-	local z0 = side * (hzMin + WALL)
+	local z0 = side * vistaStart
 	local depth = 150
-	local far = side * (hzMin + WALL + depth)
+	local far = side * (vistaStart + depth)
 	local floorY = center.Y - height / 2 - rng:NextNumber(18, 34)
 	terrain:FillBlock(CFrame.new(center.X, floorY - 10, (z0 + far) / 2), Vector3.new(width + 220, 20, depth + 10), theme.wall)
 	terrain:FillBlock(CFrame.new(center.X, center.Y + 30, far + side * 10), Vector3.new(width + 240, 220, 20), theme.wall)
@@ -1772,8 +1776,18 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				end
 				local side = -1
 				local center = Vector3.new((x1 + x2) / 2, (yb + yt) / 2, side * (hzMin + WALL / 2))
-				-- Cut the window and keep players (and the camera) on this side of it.
-				terrain:FillBlock(CFrame.new(center.X, center.Y, side * (hzMin + WALL / 2 + 1)), Vector3.new(x2 - x1, yt - yb, WALL + 8), Enum.Material.Air)
+				local reach = (x2 - x1) / 2 + 140
+				local hzMax = 0
+				for cc = 1, w do
+					if math.abs(colX(cc) - center.X) <= reach then
+						hzMax = math.max(hzMax, hzAt(cc))
+					end
+				end
+				vistaStart = hzMax + WALL + 4
+				-- Cut the window (through to where the scenery begins) and keep players and the
+				-- camera on this side of it.
+				local cutFrom, cutTo = hzMin - 3, vistaStart + 2
+				terrain:FillBlock(CFrame.new(center.X, center.Y, side * (cutFrom + cutTo) / 2), Vector3.new(x2 - x1, yt - yb, cutTo - cutFrom), Enum.Material.Air)
 				local barrier = Instance.new("Part")
 				barrier.Name = "VistaBarrier"
 				barrier.Anchored = true

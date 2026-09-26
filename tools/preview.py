@@ -289,7 +289,7 @@ def mixed_sheet(entries, cols=4, size=(260, 260), fps=24, seconds=None):
 
 
 SHOWCASE = {
-    "showcase_wanderer": [("wanderer", c) for c in ["idle", "run", "attackSide", "attackUp", "attackDown", "cleave", "dash", "heal"]],
+    "showcase_wanderer": [("wanderer", c) for c in ["idle", "run", "attackSide", "attackUp", "cleave", "dash", "swing", "heal"]],
     "showcase_npcs": [(n, "idle") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
     "showcase_npcs_talk": [(n, "talk") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
     "showcase_enemies": [("mite", "move"), ("crystal_mite", "attack"), ("gnat", "move"), ("wisp", "attack"),

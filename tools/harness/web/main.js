@@ -172,7 +172,7 @@ async function main() {
     .sort((a, b) => a.d - b.d)
     .slice(0, MAX_LIGHTS);
   for (const l of lights) {
-    const light = new THREE.PointLight(srgb(l.col), l.b * 14, l.r, 1.0);
+    const light = new THREE.PointLight(srgb(l.col), l.b * 5, l.r, 0.8);
     light.position.set(...l.p);
     scene.add(light);
   }

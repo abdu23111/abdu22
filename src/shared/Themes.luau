@@ -131,7 +131,7 @@ local Themes: { [string]: Theme } = {
 		bone = rgb(250, 240, 220),
 		wood = rgb(140, 96, 62),
 		fabric = rgb(196, 70, 96),
-		fog = rgb(150, 116, 120),
+		fog = rgb(118, 88, 98),
 		fogStart = 110,
 		fogEnd = 380,
 		ambient = rgb(176, 154, 152),
@@ -141,8 +141,8 @@ local Themes: { [string]: Theme } = {
 		decor = "temple",
 		wall = Enum.Material.Limestone,
 		top = Enum.Material.Sand,
-		wallColor = rgb(232, 214, 198),
-		topColor = rgb(240, 222, 180),
+		wallColor = rgb(204, 180, 166),
+		topColor = rgb(232, 206, 160),
 	},
 	-- The violet crystal mine: deep purple basalt, lilac crystal floors, magenta and cyan light.
 	mines = {
@@ -222,8 +222,8 @@ local Themes: { [string]: Theme } = {
 		decor = "abyss",
 		wall = Enum.Material.Concrete,
 		top = Enum.Material.Salt,
-		wallColor = rgb(106, 110, 130),
-		topColor = rgb(208, 212, 226),
+		wallColor = rgb(96, 100, 122),
+		topColor = rgb(172, 178, 198),
 	},
 	-- The Glowmire: a vast cool-blue cavern of giant luminous mushrooms and still pools.
 	glowmire = {

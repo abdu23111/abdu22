@@ -734,16 +734,19 @@ function Props.lightShafts(zoneIndex: number, chars, theme, folder: Folder)
 				local top = Grid.tileCenter(zoneIndex, c, r0) + Vector3.new(0, T / 2, 0)
 				local len = rng:NextNumber(60, 110)
 				local angle = math.rad(rng:NextNumber(10, 22))
-				local z = rng:NextNumber(-Config.CORRIDOR * 0.6, Config.CORRIDOR * 0.6)
+				-- Against the back wall, where they read as distant god-rays rather than slabs in the way.
+				local hz = Grid.halfWidth(zoneIndex, c)
+				local z = -(hz - rng:NextNumber(2, 5))
 				local cf = CFrame.new(top + Vector3.new(0, 0, z)) * CFrame.Angles(math.rad(rng:NextNumber(-8, 8)), 0, angle) * CFrame.new(0, -len / 2, 0)
-				local thick = rng:NextNumber(6, 11)
+				local thick = rng:NextNumber(2.5, 4.5)
 				local beam = part("Part", {
 					Name = "Shaft",
-					Size = Vector3.new(thick, len, thick),
-					CFrame = cf,
+					Shape = Enum.PartType.Cylinder,
+					Size = Vector3.new(len, thick, thick),
+					CFrame = cf * CFrame.Angles(0, 0, math.pi / 2),
 					Color = theme.accent:Lerp(Color3.new(1, 1, 1), 0.6),
 					Material = Enum.Material.Neon,
-					Transparency = 0.955,
+					Transparency = 0.97,
 					Parent = shafts,
 				})
 				make("ParticleEmitter", {
@@ -806,18 +809,46 @@ end
 
 -- A glowing archway where a passage leads on to another region.
 function Props.doorway(center: Vector3, size: Vector3, inward: number, theme, parent: Instance)
+	-- A framed portal: carved pillars and a lintel around a softly glowing veil.
 	local x = center.X + inward * (T / 2 - 0.3)
 	local glowColor = theme.accent:Lerp(Color3.new(1, 1, 1), 0.5)
-	local veil = part("Part", {
-		Name = "DoorVeil",
-		Size = Vector3.new(0.3, size.Y, size.Z),
-		Position = Vector3.new(x, center.Y, center.Z),
-		Color = glowColor,
-		Material = Enum.Material.Neon,
-		Transparency = 0.88,
+	local width = math.min(size.Z, Props.DOOR_WIDTH)
+	local stone = theme.smooth
+	for _, s in { -1, 1 } do
+		part("Part", {
+			Name = "DoorPillar",
+			Size = Vector3.new(T, size.Y + 1, 2),
+			Position = Vector3.new(center.X + inward * 0.4, center.Y + 0.5, s * (width / 2 + 1)),
+			Color = stone,
+			Material = theme.material,
+			CanCollide = true,
+			Parent = parent,
+		}).CanCollide = true
+	end
+	part("Part", {
+		Size = Vector3.new(T, 2, width + 4),
+		Position = Vector3.new(center.X + inward * 0.4, center.Y + size.Y / 2 + 1, 0),
+		Color = theme.rim,
+		Material = theme.material,
 		Parent = parent,
 	})
-	make("PointLight", { Range = 22, Brightness = 1.4, Color = glowColor, Parent = veil })
+	local gem = part("Part", {
+		Size = Vector3.new(0.4, 1.2, 1.2),
+		CFrame = CFrame.new(center.X + inward * (T / 2 + 0.6), center.Y + size.Y / 2 + 1, 0) * CFrame.Angles(math.rad(45), 0, 0),
+		Color = glowColor,
+		Material = Enum.Material.Neon,
+		Parent = parent,
+	})
+	local veil = part("Part", {
+		Name = "DoorVeil",
+		Size = Vector3.new(0.3, size.Y, width),
+		Position = Vector3.new(x, center.Y, 0),
+		Color = glowColor,
+		Material = Enum.Material.Neon,
+		Transparency = 0.9,
+		Parent = parent,
+	})
+	make("PointLight", { Range = 24, Brightness = 1.4, Color = glowColor, Parent = gem })
 	make("ParticleEmitter", {
 		Texture = SPARKLE,
 		Color = ColorSequence.new(glowColor),
@@ -832,6 +863,7 @@ function Props.doorway(center: Vector3, size: Vector3, inward: number, theme, pa
 		Parent = veil,
 	})
 end
+Props.DOOR_WIDTH = 12
 
 -- Region-specific set dressing against the cave walls.
 function Props.wallDecor(theme, floor: Vector3, side: number, rng: Random, parent: Instance)
