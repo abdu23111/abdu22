@@ -115,88 +115,72 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
     fur ruff, feathered fronds for antennae, a teal travelling cloak lined in amber, a rust
     scarf, dusty wings folded under the cloak, a lantern at the hip and a gilded leaf-blade."""
     r = Rig(name, 3.0)
+    # A clean, readable silhouette: a big pale mask, a small bell of cloak, thin dark legs
+    # that stay visible below it, and a slim blade. Detail is kept to what reads in motion.
     r.bone("root")
-    r.bone("hips", "root", (0, 1.25))
-    r.bone("legB", "hips", (-0.05, 0.05, -0.38))
-    r.bone("legF", "hips", (0.05, 0.05, 0.38))
+    r.bone("hips", "root", (0, 1.4))
+    r.bone("legB", "hips", (-0.05, 0.05, -0.3))
+    r.bone("legF", "hips", (0.05, 0.05, 0.3))
     r.bone("body", "hips", (0, 0))
-    r.bone("hem", "body", (-0.05, 0.15))
-    r.bone("lantern", "body", (-0.2, 0.55, -1.0), rest=-8)
-    r.bone("armB", "body", (0.05, 1.35, -0.85), rest=-15)
-    r.bone("head", "body", (0.08, 1.85))
-    r.bone("antB", "head", (-0.1, 1.0, -0.32), rest=38)
-    r.bone("antF", "head", (-0.1, 1.0, 0.32), rest=38)
-    r.bone("armF", "body", (0.1, 1.35, 0.85), rest=20)
-    r.bone("nail", "armF", (0.05, -0.75, 0.15), rest=40)
+    r.bone("hem", "body", (-0.05, 0.1))
+    r.bone("scarf", "body", (-0.45, 1.3), rest=-10)
+    r.bone("lantern", "body", (-0.55, 0.5, -0.72), rest=-8)
+    r.bone("armB", "body", (0.0, 1.1, -0.62), rest=-15)
+    r.bone("head", "body", (0.06, 1.5))
+    r.bone("antB", "head", (-0.15, 1.05, -0.3), rest=38)
+    r.bone("antF", "head", (-0.15, 1.05, 0.3), rest=38)
+    r.bone("armF", "body", (0.1, 1.1, 0.66), rest=20)
+    r.bone("nail", "armF", (0.02, -0.62, 0.12), rest=40)
 
-    # Legs: jointed chitin with wrapped leather boots.
+    # Legs: thin chitin with small boots, long enough to read every stride.
     for leg in ("legB", "legF"):
-        tone = chitin if leg == "legF" else tuple(int(c * 0.75) for c in chitin)
-        r.part(leg, "box", (0.34, 0.9, 0.34), (0, -0.45, 0), color=tone)
-        r.part(leg, "ball", (0.62, 0.42, 0.5), (0.14, -0.98, 0), color=(126, 76, 50))
-        r.part(leg, "box", (0.44, 0.12, 0.44), (0.02, -0.7, 0), color=(92, 56, 40))
-    # Back arm, mostly hidden by the cloak.
-    r.part("armB", "box", (0.28, 0.85, 0.28), (0, -0.42, 0), color=chitin)
-    # Folded wings under the cloak: dusty lavender with a glowing eye-spot, they stick out
-    # behind and give the silhouette its shape.
+        tone = chitin if leg == "legF" else tuple(int(c * 0.7) for c in chitin)
+        r.part(leg, "box", (0.26, 1.25, 0.26), (0, -0.62, 0), color=tone)
+        r.part(leg, "ball", (0.52, 0.34, 0.42), (0.12, -1.28, 0), color=(126, 76, 50))
+    r.part("armB", "box", (0.24, 0.8, 0.24), (0, -0.4, 0), color=chitin)
+    # Small folded wings peeking out behind.
     for side in (-1, 1):
-        r.part("body", "ball", (0.3, 2.0, 1.25), (-0.95, 1.2, side * 0.55), rot=24, color=wing)
-        r.part("body", "ball", (0.32, 0.5, 0.5), (-1.0, 1.35, side * 0.6), rot=24, color=(255, 196, 120), mat="n", alpha=0.2)
-    # Cloak: a bell of teal cloth open at the front to show the amber lining and fur belly.
-    r.part("body", "ball", (2.15, 2.35, 2.2), (-0.1, 0.95, 0), color=cloak)
-    r.part("body", "ball", (1.3, 1.6, 1.3), (0.5, 0.9, 0), color=lining)
-    r.part("body", "ball", (0.8, 1.0, 0.85), (0.72, 0.8, 0), color=tuple(int(c * 0.93) for c in fur))
-    # Cream ruff around the neck.
-    for i in range(7):
-        a = (i / 7) * math.pi * 2
-        r.part("body", "ball", (0.56, 0.42, 0.56), (math.cos(a) * 0.6 - 0.05, 1.78 + (i % 2) * 0.06, math.sin(a) * 0.6), color=fur)
-    # Scarf: knotted at the throat, tails streaming behind.
-    r.part("body", "ball", (0.5, 0.42, 0.5), (0.72, 1.55, 0.25), color=scarf)
-    r.part("hem", "box", (0.9, 0.3, 0.12), (-1.25, 1.5, 0.35), rot=-18, color=scarf, mat="f")
-    r.part("hem", "box", (0.75, 0.26, 0.12), (-1.2, 1.22, 0.2), rot=-32, color=tuple(int(c * 0.8) for c in scarf), mat="f")
-    # Tattered hem all the way around.
-    for i in range(9):
-        a = i / 9 * math.pi * 2
-        hx, hz = math.cos(a) * 0.9, math.sin(a) * 0.9
-        r.part("hem", "tri", (0.55, 0.62 + 0.14 * (i % 3), 0.35), (hx - 0.1, -0.08, hz), rot=180, color=cloak_dark, flip=(i % 2 == 0))
-    # Satchel on the right hip.
-    r.part("body", "box", (0.55, 0.6, 0.35), (-0.25, 0.55, 1.05), color=(120, 78, 50))
-    r.part("body", "box", (0.57, 0.18, 0.37), (-0.25, 0.8, 1.05), color=(92, 56, 40))
-    # Lantern hanging at the left hip.
-    r.part("lantern", "box", (0.12, 0.35, 0.12), (0, -0.15, 0), color=INK)
-    r.part("lantern", "ball", (0.55, 0.65, 0.55), (0, -0.58, 0), color=(60, 56, 50), mat="g", alpha=0.25)
-    r.part("lantern", "ball", (0.28, 0.34, 0.28), (0, -0.58, 0), color=WARM, mat="n", tag="glow")
-    r.part("lantern", "box", (0.48, 0.1, 0.48), (0, -0.25, 0), color=gold, mat="m")
-    # Head: an oval mask with big amber eyes, dark pupils, brows and a small gem.
-    r.part("head", "ball", (1.72, 1.9, 1.62), (0.05, 0.5, 0), color=mask)
-    r.part("head", "ball", (1.4, 0.6, 1.3), (0.12, 0.05, 0), color=MASK_SHADE)
+        r.part("body", "ball", (0.26, 1.35, 0.85), (-0.85, 1.05, side * 0.42), rot=26, color=wing)
+    # The cloak: a bell of teal cloth with the amber lining showing at the front.
+    r.part("body", "ball", (1.75, 1.9, 1.6), (-0.05, 0.8, 0), color=cloak)
+    r.part("body", "ball", (0.3, 1.1, 0.55), (0.78, 0.72, 0), color=lining)
+    r.part("hem", "ball", (2.0, 0.75, 1.8), (-0.08, 0.05, 0), color=cloak_dark)
+    for i in range(8):
+        a = i / 8 * math.pi * 2
+        r.part("hem", "tri", (0.5, 0.55 + 0.15 * (i % 2), 0.32), (math.cos(a) * 0.85 - 0.08, -0.35, math.sin(a) * 0.8), rot=180, color=cloak_dark, flip=(i % 2 == 0))
+    # Scarf: wrapped at the throat, its tails stream behind on their own bone.
+    r.part("body", "ball", (1.25, 0.42, 1.25), (0.05, 1.35, 0), color=scarf)
+    r.part("scarf", "box", (1.1, 0.3, 0.12), (-0.5, 0, 0.3), color=scarf, mat="f")
+    r.part("scarf", "box", (0.9, 0.26, 0.12), (-0.45, -0.22, 0.18), rot=-12, color=tuple(int(c * 0.8) for c in scarf), mat="f")
+    # A small lantern at the back hip.
+    r.part("lantern", "box", (0.1, 0.3, 0.1), (0, -0.12, 0), color=INK)
+    r.part("lantern", "ball", (0.44, 0.52, 0.44), (0, -0.48, 0), color=(60, 56, 50), mat="g", alpha=0.25)
+    r.part("lantern", "ball", (0.24, 0.3, 0.24), (0, -0.48, 0), color=WARM, mat="n", tag="glow")
+    r.part("lantern", "box", (0.4, 0.08, 0.4), (0, -0.2, 0), color=gold, mat="m")
+    # Head: a big oval mask with amber eyes and a small glowing gem.
+    r.part("head", "ball", (1.7, 1.85, 1.55), (0.05, 0.55, 0), color=mask)
+    r.part("head", "ball", (1.35, 0.55, 1.25), (0.12, 0.08, 0), color=MASK_SHADE)
     for side in (-1, 1):
-        z = side * 0.36
-        r.part("head", "ball", (0.2, 0.62, 0.44), (0.83, 0.52, z), color=eye, mat="n", tag="eye")
-        r.part("head", "ball", (0.12, 0.34, 0.22), (0.9, 0.48, z * 0.95), color=(24, 14, 10), tag="eye")
-        r.part("head", "ball", (0.06, 0.12, 0.1), (0.95, 0.62, z * 0.9 + 0.05), color=(255, 250, 240), mat="n", tag="eye")
-        r.part("head", "box", (0.1, 0.1, 0.36), (0.8, 0.95, z * 1.05), rot=-8 * side, color=(70, 50, 56))
-        r.part("head", "ball", (0.1, 0.18, 0.26), (0.78, 0.12, side * 0.48), color=(240, 150, 140))
+        z = side * 0.35
+        r.part("head", "ball", (0.2, 0.66, 0.42), (0.83, 0.55, z), color=eye, mat="n", tag="eye")
+        r.part("head", "ball", (0.12, 0.36, 0.2), (0.9, 0.5, z * 0.95), color=(24, 14, 10), tag="eye")
+        r.part("head", "ball", (0.06, 0.12, 0.1), (0.95, 0.66, z * 0.9 + 0.05), color=(255, 250, 240), mat="n", tag="eye")
     r.part("head", "box", (0.12, 0.18, 0.18), (0.8, 1.2, 0), rot=45, color=(110, 230, 220), mat="n")
-    # Feathered antennae: fronds that sweep back like a moth's.
+    # Feathered antennae.
     for ant in ("antB", "antF"):
-        r.part(ant, "box", (0.1, 0.8, 0.1), (0, 0.38, 0), color=gold)
-        r.part(ant, "box", (0.09, 0.7, 0.09), (-0.2, 0.98, 0), rot=30, color=gold)
-        for k, (ox, oy, w, h, rot) in enumerate(((-0.05, 0.5, 0.5, 0.26, 70), (-0.15, 0.85, 0.62, 0.28, 60), (-0.35, 1.15, 0.7, 0.28, 50), (-0.6, 1.4, 0.6, 0.24, 40))):
+        r.part(ant, "box", (0.09, 0.8, 0.09), (0, 0.38, 0), color=gold)
+        for k, (ox, oy, w, h, rot) in enumerate(((-0.05, 0.5, 0.5, 0.24, 70), (-0.2, 0.9, 0.62, 0.26, 55), (-0.45, 1.2, 0.6, 0.24, 40))):
             r.part(ant, "ball", (w, h, 0.1), (ox + 0.12, oy, 0), rot=rot, color=fur if k % 2 == 0 else (250, 238, 214))
-    # Front arm and the leaf-blade: wrapped grip, gilded guard and pommel, a broad blade
-    # with a glowing fuller.
-    r.part("armF", "box", (0.3, 0.85, 0.3), (0, -0.4, 0), color=chitin)
-    r.part("armF", "ball", (0.4, 0.4, 0.4), (0, -0.82, 0), color=(126, 76, 50))
-    r.part("nail", "ball", (0.26, 0.26, 0.26), (0, 0.05, 0), color=gold, mat="m")
-    r.part("nail", "box", (0.18, 0.55, 0.18), (0, -0.25, 0), color=(92, 56, 40))
-    r.part("nail", "box", (0.8, 0.14, 0.28), (0, -0.56, 0), color=gold, mat="m")
-    r.part("nail", "box", (0.2, 2.3, 0.4), (0, -1.78, 0), color=nail, mat="m")
-    r.part("nail", "tri", (0.2, 0.6, 0.4), (0.0, -3.22, 0), rot=180, color=nail, mat="m")
-    r.part("nail", "box", (0.05, 2.1, 0.12), (0.08, -1.7, 0), color=glow, mat="n", alpha=0.2, tag="glow")
+    # Sword arm and a slim leaf-blade with a glowing fuller.
+    r.part("armF", "box", (0.26, 0.8, 0.26), (0, -0.38, 0), color=chitin)
+    r.part("armF", "ball", (0.36, 0.36, 0.36), (0, -0.78, 0), color=(126, 76, 50))
+    r.part("nail", "box", (0.16, 0.4, 0.16), (0, -0.15, 0), color=(92, 56, 40))
+    r.part("nail", "box", (0.6, 0.12, 0.24), (0, -0.38, 0), color=gold, mat="m")
+    r.part("nail", "box", (0.16, 1.75, 0.34), (0, -1.3, 0), color=nail, mat="m")
+    r.part("nail", "tri", (0.16, 0.5, 0.34), (0, -2.42, 0), rot=180, color=nail, mat="m")
+    r.part("nail", "box", (0.05, 1.6, 0.1), (0.07, -1.25, 0), color=glow, mat="n", alpha=0.2, tag="glow")
     if shade:
-        # The Echo: tattered wisps of darkness trailing from the cloak.
-        for i, (dx, dy, dz) in enumerate(((-1.2, 1.4, 0.3), (-1.35, 0.7, -0.3), (-1.1, 2.1, 0))):
+        for i, (dx, dy, dz) in enumerate(((-1.1, 1.3, 0.3), (-1.25, 0.6, -0.3), (-1.0, 1.9, 0))):
             r.part("hem", "tri", (0.35, 0.9, 0.3), (dx, dy, dz), rot=100 + i * 12, color=(6, 6, 9))
 
     # ---------------- animations
@@ -586,7 +570,203 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
         "antF": loop_keys(3.0, (-6,), (2,)),
         "antB": loop_keys(3.0, (-4,), (4,)),
     })
+    hero_motion(r)
     return r
+
+
+def hero_motion(r):
+    """The core moveset, animated for snap and readability: strong key poses reached fast
+    (ease-out), brief holds on contact frames, overlapping cloak/scarf/antennae that trail the
+    body, and squash and stretch on every take-off, landing and strike.
+
+    Angle guide (the side plane): + swings a hanging limb's end forward. armF rests at 20 and
+    the nail at +40 on it, so arm offset + nail offset + 60 is the blade's angle from
+    straight down (90 = level forward, 180 = straight up)."""
+    O = "o"
+    # Idle: a slow breath, the cloak and scarf drifting, blade held low behind.
+    r.clip("idle", 2.4, {
+        "hips": loop_keys(2.4, (0, 0, 0, 1, 1), (0, 0, -0.03, 1.02, 0.98)),
+        "body": loop_keys(2.4, (2, 0, 0, 1, 1), (3, 0, 0.02, 1.02, 1.03)),
+        "head": loop_keys(2.4, (0, 0, 0), (-3, 0, -0.03)),
+        "antF": loop_keys(2.4, (0,), (7,), (-2,), (5,)),
+        "antB": loop_keys(2.4, (0,), (-4,), (6,), (-2,)),
+        "hem": loop_keys(2.4, (0,), (3,)),
+        "scarf": loop_keys(2.4, (0,), (8,), (2,), (6,)),
+        "lantern": loop_keys(2.4, (0,), (6,), (0,), (-5,)),
+        "armF": loop_keys(2.4, (-45,), (-42,)),
+        "nail": loop_keys(2.4, (-10,), (-8,)),
+        "armB": loop_keys(2.4, (10,), (6,)),
+        "legF": loop_keys(2.4, (6,), (6,)),
+        "legB": loop_keys(2.4, (-6,), (-6,)),
+    })
+    # Run: a quick, bouncy scamper. Big clear strides, the body pitched forward and bobbing
+    # up on each passing step, the cloak and scarf streaming, blade trailed low behind.
+    run = 0.36
+    r.clip("run", run, {
+        "legF": loop_keys(run, (55, 0, 0), (5, 0, 0.2), (-50, 0, 0), (0, 0, 0)),
+        "legB": loop_keys(run, (-50, 0, 0), (0, 0, 0), (55, 0, 0), (5, 0, 0.2)),
+        "hips": loop_keys(run, (0, 0, -0.08, 1.05, 0.95), (0, 0, 0.2, 0.96, 1.05), (0, 0, -0.08, 1.05, 0.95), (0, 0, 0.2, 0.96, 1.05)),
+        "body": loop_keys(run, (-16, 0.08), (-12, 0.08), (-16, 0.08), (-12, 0.08)),
+        "head": loop_keys(run, (8,), (3,), (8,), (3,)),
+        "hem": loop_keys(run, (26,), (34,), (26,), (34,)),
+        "scarf": loop_keys(run, (40,), (55,), (40,), (55,)),
+        "antF": loop_keys(run, (30,), (42,), (30,), (42,)),
+        "antB": loop_keys(run, (34,), (46,), (34,), (46,)),
+        "armF": loop_keys(run, (-60,), (-45,), (-60,), (-45,)),
+        "nail": loop_keys(run, (-15,), (-10,), (-15,), (-10,)),
+        "armB": loop_keys(run, (40,), (0,), (-40,), (0,)),
+        "lantern": loop_keys(run, (25,), (35,), (25,), (35,)),
+    })
+    # Take-off: one frame of crouch.
+    r.clip("jumpStart", 0.08, {
+        "hips": [K(0, 0, 0, 0, 1, 1), K(0.08, 0, 0, -0.4, 1.18, 0.8, O)],
+        "legF": [K(0, 0), K(0.08, 40)], "legB": [K(0, 0), K(0.08, -35)],
+        "body": [K(0, 0), K(0.08, -8)], "hem": [K(0, 0), K(0.08, 12)],
+    }, loop=False)
+    # Rising: stretched tall, legs trailing, everything loose swept down by the air.
+    r.clip("rise", 0.4, {
+        "hips": loop_keys(0.4, (0, 0, 0.1, 0.88, 1.14), (0, 0, 0.12, 0.9, 1.12)),
+        "legF": loop_keys(0.4, (-20, 0, 0.1), (-24, 0, 0.1)),
+        "legB": loop_keys(0.4, (-40, 0, 0.1), (-44, 0, 0.1)),
+        "body": loop_keys(0.4, (-4,), (-6,)),
+        "hem": loop_keys(0.4, (-14,), (-18,)),
+        "scarf": loop_keys(0.4, (-40,), (-48,)),
+        "antF": loop_keys(0.4, (50,), (55,)), "antB": loop_keys(0.4, (52,), (58,)),
+        "armF": loop_keys(0.4, (-70,), (-74,)), "nail": loop_keys(0.4, (-10,), (-10,)),
+        "armB": loop_keys(0.4, (-40,), (-44,)),
+    })
+    # Top of the arc: legs tucked, a moment of float.
+    r.clip("apex", 0.5, {
+        "legF": loop_keys(0.5, (55, 0, 0.12), (58, 0, 0.12)), "legB": loop_keys(0.5, (35, 0, 0.12), (38, 0, 0.12)),
+        "hips": loop_keys(0.5, (0, 0, 0.08, 1.03, 0.97), (0, 0, 0.1, 1.03, 0.97)),
+        "body": loop_keys(0.5, (-2,), (-4,)),
+        "hem": loop_keys(0.5, (-20,), (-26,)), "scarf": loop_keys(0.5, (10,), (20,)),
+        "armF": loop_keys(0.5, (-30,), (-26,)), "armB": loop_keys(0.5, (30,), (34,)),
+        "antF": loop_keys(0.5, (10,), (16,)), "antB": loop_keys(0.5, (12,), (18,)),
+    })
+    # Falling: cloak billowing up, legs apart and reaching for the ground, arms out.
+    r.clip("fall", 0.3, {
+        "hem": loop_keys(0.3, (-32, 0, 0.12), (-40, 0, 0.16)),
+        "scarf": loop_keys(0.3, (70,), (85,)),
+        "body": loop_keys(0.3, (4, 0, 0, 1.04, 0.97), (6, 0, 0, 1.05, 0.96)),
+        "armF": loop_keys(0.3, (40,), (48,)), "nail": loop_keys(0.3, (-30,), (-30,)),
+        "armB": loop_keys(0.3, (-80,), (-90,)),
+        "legF": loop_keys(0.3, (20,), (26,)), "legB": loop_keys(0.3, (-18,), (-24,)),
+        "antF": loop_keys(0.3, (-20,), (-28,)), "antB": loop_keys(0.3, (-18,), (-26,)),
+        "head": loop_keys(0.3, (-8,), (-10,)),
+    })
+    # Landing: a hard squash, cloak slapping down, then a quick spring back.
+    r.clip("land", 0.2, {
+        "hips": [K(0, 0, 0, -0.5, 1.28, 0.7, O), K(0.09, 0, 0, 0.05, 0.95, 1.06), K(0.2, 0, 0, 0, 1, 1)],
+        "legF": [K(0, 55), K(0.2, 6)], "legB": [K(0, -45), K(0.2, -6)],
+        "body": [K(0, -10), K(0.09, 4), K(0.2, 2)],
+        "head": [K(0, -12), K(0.09, 5), K(0.2, 0)],
+        "hem": [K(0, 30), K(0.12, -8), K(0.2, 0)],
+        "scarf": [K(0, 60), K(0.2, 0)],
+        "antF": [K(0, -40), K(0.12, 14), K(0.2, 0)], "antB": [K(0, -38), K(0.12, 12), K(0.2, 0)],
+        "armF": [K(0, -20), K(0.2, -45)],
+    }, loop=False)
+    # Side slash: a flick up behind, then the blade whips level through the front and snaps
+    # down, body lunging after it. Contact at 0.06; the follow-through pose holds briefly.
+    r.clip("attackSide", 0.26, {
+        "armF": [K(0, 0), K(0.03, 150, 0, 0, 1, 1, O), K(0.06, 50, 0, 0, 1, 1, O), K(0.12, -5), K(0.18, -8), K(0.26, -40)],
+        "nail": [K(0, 0), K(0.03, -30), K(0.06, -20), K(0.12, 0), K(0.26, -10)],
+        "body": [K(0, 0), K(0.03, 10, -0.1, 0.05, 0.94, 1.06), K(0.06, -18, 0.3, 0, 1.1, 0.93, O), K(0.18, -12, 0.2), K(0.26, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.06, 0, 0.25, -0.1), K(0.18, 0, 0.18, -0.08), K(0.26, 0)],
+        "legF": [K(0, 6), K(0.06, 45), K(0.26, 6)], "legB": [K(0, -6), K(0.06, -35), K(0.26, -6)],
+        "head": [K(0, 0), K(0.03, 8), K(0.06, -8), K(0.26, 0)],
+        "hem": [K(0, 0), K(0.06, 26), K(0.26, 0)], "scarf": [K(0, 0), K(0.08, 60), K(0.26, 10)],
+        "armB": [K(0, 0), K(0.06, 55), K(0.26, 0)],
+        "antF": [K(0, 0), K(0.08, 30), K(0.26, 0)], "antB": [K(0, 0), K(0.08, 32), K(0.26, 0)],
+    }, loop=False, events=[[0.05, "swing"]])
+    # Second strike: a rising backhand from low behind to high in front.
+    r.clip("attackSide2", 0.28, {
+        "armF": [K(0, -40), K(0.03, -70, 0, 0, 1, 1, O), K(0.07, 120, 0, 0, 1, 1, O), K(0.14, 140), K(0.2, 135), K(0.28, 0)],
+        "nail": [K(0, -10), K(0.03, 0), K(0.07, -70), K(0.14, -60), K(0.28, 0)],
+        "body": [K(0, 0), K(0.03, -12, 0, -0.1, 1.05, 0.95), K(0.07, 12, 0.25, 0.12, 0.93, 1.1, O), K(0.2, 8, 0.15), K(0.28, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.07, 0, 0.22, 0.05), K(0.28, 0)],
+        "legF": [K(0, 6), K(0.03, 25), K(0.07, 40), K(0.28, 6)], "legB": [K(0, -6), K(0.07, -30), K(0.28, -6)],
+        "head": [K(0, 0), K(0.03, -8), K(0.07, 12), K(0.28, 0)],
+        "hem": [K(0, 0), K(0.07, -24), K(0.28, 0)], "scarf": [K(0, 0), K(0.09, -40), K(0.28, 0)],
+        "armB": [K(0, 0), K(0.07, -60), K(0.28, 0)],
+        "antF": [K(0, 0), K(0.09, -30), K(0.28, 0)], "antB": [K(0, 0), K(0.09, -32), K(0.28, 0)],
+    }, loop=False, events=[[0.06, "swing"]])
+    # Finisher: rear right back, blade overhead, then a leaping chop that slams down in front.
+    r.clip("attackFinish", 0.5, {
+        "armF": [K(0, 0), K(0.1, 195, 0, 0, 1, 1, O), K(0.16, 35, 0, 0, 1, 1, O), K(0.3, 25), K(0.5, -40)],
+        "nail": [K(0, 0), K(0.1, -40), K(0.16, -35), K(0.3, -30), K(0.5, -10)],
+        "body": [K(0, 0), K(0.1, 20, -0.2, 0.15, 0.92, 1.12), K(0.16, -32, 0.55, -0.2, 1.18, 0.85, O), K(0.3, -26, 0.45, -0.15), K(0.5, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.1, 0, -0.15, 0.25), K(0.16, 0, 0.45, -0.3, 1.12, 0.88, O), K(0.3, 0, 0.4, -0.25), K(0.5, 0)],
+        "legF": [K(0, 6), K(0.1, -30), K(0.16, 60), K(0.3, 55), K(0.5, 6)],
+        "legB": [K(0, -6), K(0.1, 25), K(0.16, -50), K(0.3, -45), K(0.5, -6)],
+        "head": [K(0, 0), K(0.1, 12), K(0.16, -18), K(0.5, 0)],
+        "hem": [K(0, 0), K(0.1, -26), K(0.18, 40), K(0.5, 0)], "scarf": [K(0, 0), K(0.1, -30), K(0.2, 80), K(0.5, 10)],
+        "armB": [K(0, 0), K(0.1, -90), K(0.16, 80), K(0.5, 0)],
+        "antF": [K(0, 0), K(0.1, 25), K(0.18, -40), K(0.5, 0)], "antB": [K(0, 0), K(0.1, 27), K(0.18, -42), K(0.5, 0)],
+    }, loop=False, events=[[0.15, "swing"], [0.17, "thud"]])
+    # Up slash: a crouch, then the whole body stretches up behind the blade.
+    r.clip("attackUp", 0.26, {
+        "armF": [K(0, 0), K(0.03, 20, 0, 0, 1, 1, O), K(0.06, 150, 0, 0, 1, 1, O), K(0.14, 165), K(0.26, -40)],
+        "nail": [K(0, 0), K(0.03, -20), K(0.06, -30), K(0.14, -20), K(0.26, -10)],
+        "body": [K(0, 0), K(0.03, -8, 0, -0.1, 1.08, 0.92), K(0.06, 8, 0, 0.15, 0.9, 1.14, O), K(0.14, 6, 0, 0.1), K(0.26, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.03, 0, 0, -0.15), K(0.06, 0, 0, 0.1), K(0.26, 0)],
+        "head": [K(0, 0), K(0.06, 16), K(0.26, 0)],
+        "hem": [K(0, 0), K(0.06, -20), K(0.26, 0)], "scarf": [K(0, 0), K(0.08, -50), K(0.26, 0)],
+        "legF": [K(0, 6), K(0.03, 30), K(0.06, 0), K(0.26, 6)], "legB": [K(0, -6), K(0.03, -25), K(0.06, 0), K(0.26, -6)],
+        "armB": [K(0, 0), K(0.06, -40), K(0.26, 0)],
+    }, loop=False, events=[[0.05, "swing"]])
+    # Down slash (air): blade raised, then driven straight down, legs tucked.
+    r.clip("attackDown", 0.26, {
+        "armF": [K(0, 0), K(0.03, 140, 0, 0, 1, 1, O), K(0.06, -15, 0, 0, 1, 1, O), K(0.14, -20), K(0.26, -20)],
+        "nail": [K(0, 0), K(0.03, -30), K(0.06, -45), K(0.14, -45), K(0.26, -10)],
+        "body": [K(0, 0), K(0.03, 12, 0, 0.1), K(0.06, -24, 0, -0.1, 1.06, 0.94, O), K(0.14, -20), K(0.26, 0)],
+        "legF": [K(0, 0), K(0.06, 70), K(0.26, 20)], "legB": [K(0, 0), K(0.06, 55), K(0.26, 10)],
+        "head": [K(0, 0), K(0.06, -16), K(0.26, 0)],
+        "hem": [K(0, 0), K(0.06, -30), K(0.26, 0)], "scarf": [K(0, 0), K(0.08, -60), K(0.26, 0)],
+    }, loop=False, events=[[0.05, "swing"]])
+    # Dash: flattened into a streak, everything loose flung straight back.
+    r.clip("dash", 0.16, {
+        "root": loop_keys(0.16, (0, 0, 0, 1.3, 0.82), (0, 0, 0, 1.32, 0.8)),
+        "body": loop_keys(0.16, (-30, 0.1), (-32, 0.1)),
+        "hem": loop_keys(0.16, (55,), (62,)), "scarf": loop_keys(0.16, (80,), (90,)),
+        "legF": loop_keys(0.16, (-65,), (-70,)), "legB": loop_keys(0.16, (-80,), (-84,)),
+        "head": loop_keys(0.16, (10,), (10,)),
+        "antF": loop_keys(0.16, (65,), (70,)), "antB": loop_keys(0.16, (68,), (72,)),
+        "armF": loop_keys(0.16, (-95,), (-98,)), "nail": loop_keys(0.16, (-10,), (-10,)),
+        "armB": loop_keys(0.16, (-80,), (-84,)),
+    })
+    # Wall slide: back pressed to the wall, the rear hand clawing the stone, knees up, the
+    # cloak and scarf lifted by the slide, a tiny judder as it scrapes down.
+    r.clip("wall", 0.2, {
+        "root": loop_keys(0.2, (0, -0.05, 0), (0, -0.02, 0.03), (0, -0.05, -0.02)),
+        "hips": loop_keys(0.2, (0, -0.1, -0.15, 1.04, 0.95), (0, -0.1, -0.17, 1.05, 0.94)),
+        "body": loop_keys(0.2, (12, -0.2), (14, -0.22), (11, -0.2)),
+        "armB": loop_keys(0.2, (-150,), (-156,), (-148,)),
+        "armF": loop_keys(0.2, (-20,), (-15,), (-22,)), "nail": loop_keys(0.2, (-10,), (-10,), (-10,)),
+        "legB": loop_keys(0.2, (-30,), (-34,), (-28,)), "legF": loop_keys(0.2, (55,), (60,), (52,)),
+        "hem": loop_keys(0.2, (-40,), (-46,), (-38,)), "scarf": loop_keys(0.2, (-70,), (-80,), (-66,)),
+        "head": loop_keys(0.2, (-8,), (-10,), (-7,)),
+        "antF": loop_keys(0.2, (-35,), (-28,), (-36,)), "antB": loop_keys(0.2, (-32,), (-26,), (-34,)),
+    })
+    # Kicking off a wall: legs snap straight, the body launches out and up.
+    r.clip("wallJump", 0.24, {
+        "body": [K(0, 12, -0.15), K(0.05, -20, 0.15, 0.1, 0.9, 1.12, O), K(0.24, -4)],
+        "hips": [K(0, 0, 0, -0.15, 1.1, 0.9), K(0.05, 0, 0, 0.1, 0.92, 1.1, O), K(0.24, 0)],
+        "legF": [K(0, 55), K(0.05, -40), K(0.24, -15)], "legB": [K(0, -30), K(0.05, -60), K(0.24, -30)],
+        "armB": [K(0, -150), K(0.06, 60), K(0.24, 0)], "armF": [K(0, -20), K(0.06, -70), K(0.24, -50)],
+        "hem": [K(0, -40), K(0.08, 35), K(0.24, 0)], "scarf": [K(0, -70), K(0.08, 70), K(0.24, 20)],
+        "antF": [K(0, -30), K(0.1, 45), K(0.24, 10)], "antB": [K(0, -28), K(0.1, 47), K(0.24, 12)],
+    }, loop=False)
+    # Taking a hit: snapped backwards, limbs flung, then gathering itself.
+    r.clip("hurt", 0.36, {
+        "body": [K(0, 0), K(0.04, 28, -0.3, 0.1, 0.86, 1.14, O), K(0.36, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.04, 0, -0.2, 0.1), K(0.36, 0)],
+        "head": [K(0, 0), K(0.04, 25), K(0.36, 0)],
+        "armF": [K(0, 0), K(0.04, -90), K(0.36, -45)], "armB": [K(0, 0), K(0.04, 90), K(0.36, 0)],
+        "legF": [K(0, 0), K(0.04, -35), K(0.36, 6)], "legB": [K(0, 0), K(0.04, 40), K(0.36, -6)],
+        "hem": [K(0, 0), K(0.06, -30), K(0.36, 0)], "scarf": [K(0, 0), K(0.06, -60), K(0.36, 0)],
+        "antF": [K(0, 0), K(0.06, -40), K(0.36, 0)], "antB": [K(0, 0), K(0.06, -40), K(0.36, 0)],
+    }, loop=False)
 
 
 def main():
