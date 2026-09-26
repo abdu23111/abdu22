@@ -1,6 +1,6 @@
 local Config = {
-	StartingCoins = 0,
-	CoinsPerTick = 1,
+	StartingHP = 0,
+	HPPerTick = 1,
 	TickSeconds = 1,
 }
 
