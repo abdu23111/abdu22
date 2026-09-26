@@ -65,6 +65,8 @@ local SWING_CLIPS = {
 	up = "attackUp",
 	down = "attackDown",
 	cleave = "cleave",
+	dashslash = "dashSlash",
+	cyclone = "cyclone",
 	bolt = "bolt",
 }
 
@@ -83,6 +85,9 @@ local PRIORITY = {
 	flip = 2,
 	dodge = 2,
 	wallJump = 2,
+	dashSlash = 4,
+	cyclone = 4,
+	wallGrab = 1,
 	land = 1,
 	jumpStart = 1,
 	runStart = 1,
@@ -120,6 +125,12 @@ function Characters.action(clip: string, speed: number?)
 	if localEntry then
 		play(localEntry, clip, speed)
 	end
+end
+
+-- Umbral Cloak: the local character turns to shadow for a moment.
+local shadeUntil = 0
+function Characters.shade(duration: number)
+	shadeUntil = os.clock() + duration
 end
 
 function Characters.flash(amount: number)
@@ -461,7 +472,11 @@ function Characters.init()
 
 			-- Hurt flash and post-hit flicker.
 			entry.flash = math.max(0, entry.flash - dt * 5)
-			rig:tint(Color3.fromRGB(255, 255, 255), entry.flash)
+			if entry.isLocal and now < shadeUntil then
+				rig:tint(Color3.fromRGB(4, 4, 8), 0.92)
+			else
+				rig:tint(Color3.fromRGB(255, 255, 255), entry.flash)
+			end
 			if entry.isLocal then
 				local flicker = now < State.invulnUntil and math.floor(now * 14) % 2 == 0
 				rig:setTransparency(if flicker then 0.55 else 0)

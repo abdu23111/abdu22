@@ -431,6 +431,32 @@ function Props.altar(floor: Vector3, parent: Instance)
 	prompt(lamp, "Kindle the Lantern", "Great Lamp")
 end
 
+-- The Hall of Trials' statue: a masked figure on a plinth, holding a glowing blade aloft.
+function Props.trialStatue(floor: Vector3, parent: Instance)
+	local model = make("Model", { Name = "TrialStatue", Parent = parent })
+	local stone = Color3.fromRGB(150, 146, 160)
+	local z = -2
+	part("Part", { Size = Vector3.new(6, 1.4, 4), Position = floor + Vector3.new(0, 0.7, z), Color = stone:Lerp(Color3.new(0, 0, 0), 0.35), Material = Enum.Material.Marble, Parent = model })
+	part("Part", { Size = Vector3.new(4, 1, 3), Position = floor + Vector3.new(0, 1.9, z), Color = stone:Lerp(Color3.new(0, 0, 0), 0.2), Material = Enum.Material.Marble, Parent = model })
+	part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(3.2, 4.4, 3), Position = floor + Vector3.new(0, 4.6, z), Color = stone, Material = Enum.Material.Marble, Parent = model })
+	local head = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(2.4, 2.8, 2.2), Position = floor + Vector3.new(0, 7.6, z), Color = Color3.fromRGB(230, 226, 216), Material = Enum.Material.Marble, Parent = model })
+	for _, x in { -0.45, 0.45 } do
+		part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(0.5, 0.9, 0.3), Position = floor + Vector3.new(x, 7.6, z + 1.05), Color = Color3.fromRGB(20, 18, 26), Parent = model })
+	end
+	part("Part", { Size = Vector3.new(0.5, 2.6, 0.5), CFrame = CFrame.new(floor + Vector3.new(1.8, 6.6, z)) * CFrame.Angles(0, 0, math.rad(-20)), Color = stone, Material = Enum.Material.Marble, Parent = model })
+	local blade = part("Part", {
+		Size = Vector3.new(0.4, 5, 0.5),
+		CFrame = CFrame.new(floor + Vector3.new(2.6, 10, z)) * CFrame.Angles(0, 0, math.rad(-20)),
+		Color = Color3.fromRGB(255, 214, 150),
+		Material = Enum.Material.Neon,
+		Parent = model,
+	})
+	blade:SetAttribute("Pulse", true)
+	make("PointLight", { Range = 22, Brightness = 1.6, Color = blade.Color, Parent = blade })
+	model.PrimaryPart = head
+	prompt(head, "Challenge", "Statue of Trials")
+end
+
 local function glowProp(style: string, floor: Vector3, theme, rng: Random, parent: Instance): BasePart
 	local z = 0
 	local light

@@ -36,6 +36,13 @@ Config.NAIL_UPGRADE_COST = { 200, 450, 800 } -- cost to go from level n to n+1
 -- Cleaving Arc (hold the nail, then release)
 Config.CLEAVE_CHARGE = 0.75
 Config.CLEAVE_MULT = 2.5
+-- Nail arts: release the charge while dashing (Dash Slash) or standing still (Cyclone Slash).
+Config.DASH_SLASH_MULT = 2.2
+Config.CYCLONE_MULT = 0.9 -- per hit
+Config.CYCLONE_HITS = 5
+-- Umbral Cloak: the dash turns to shadow and passes through enemies and attacks.
+Config.SHADE_COOLDOWN = 1.5
+Config.SHADE_INVULN = 0.3
 
 -- Lumen Bolt (soul spell)
 Config.BOLT_COST = 33
@@ -66,9 +73,10 @@ Config.SWING_MAX_SPEED = 100
 Config.SWING_RELEASE_LIFT = 14 -- upward boost when letting go (more if released with jump)
 Config.DASH_TIME = 0.18
 Config.DASH_COOLDOWN = 0.45
-Config.WALL_SLIDE_SPEED = 9
-Config.WALL_JUMP_PUSH = 34
-Config.WALL_JUMP_LOCK = 0.16
+Config.WALL_SLIDE_SPEED = 13 -- constant slide speed while clinging
+Config.WALL_JUMP_PUSH = 30 -- sideways kick off a wall; control returns after WALL_JUMP_LOCK
+Config.WALL_JUMP_LOCK = 0.13
+Config.WALL_COYOTE = 0.12 -- a wall jump still works this long after letting go of the wall
 Config.POGO_VELOCITY = 58
 Config.KNOCKBACK = Vector2.new(36, 32)
 

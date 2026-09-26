@@ -231,6 +231,28 @@ def glowmire():
     return m
 
 
+def trials():
+    """The Hall of Trials: a quiet lobby with a bench, the challenge statue and a climbing
+    pillar for practising wall jumps, then one great arena where any foe can be faced again."""
+    m = Map(92, 26)
+    f, p = m.fill, m.put
+    f(1, 92, 1, 5)
+    f(1, 92, 23, 26)
+    # Lobby
+    p(5, 22, "B"); p(12, 22, "V"); p(3, 22, "L")
+    f(20, 21, 11, 22)                  # climbing pillar (rough stone: cling and wall-jump up it)
+    f(27, 28, 8, 18)                   # a second wall to zig-zag between
+    p(24, 7, "$")
+    f(14, 17, 16, 16)                  # a ledge
+    # Arena
+    f(34, 34, 6, 22, "G")
+    f(35, 38, 18, 18); f(81, 84, 18, 18)   # side ledges
+    f(55, 64, 13, 13)                      # a high central platform
+    p(45, 15, "K")
+    f(89, 92, 6, 22)
+    return m
+
+
 def hollow():
     m = Map(120, 46)
     f, p = m.fill, m.put
@@ -328,6 +350,12 @@ META = [
         "M": '{ kind = "memory", id = "mire_bloom" }',
         "$": '{ kind = "geo", amount = 90 }',
     }, (3.6, 6.2), 1.9),
+    ("trials", "Hall of Trials", "Where every foe waits again", "temple", "temple", trials, {
+        "V": '{ kind = "trial" }',
+        "L": '{ kind = "npc", id = "tablet_trials", tablet = true }',
+        "$": '{ kind = "geo", amount = 40 }',
+        "K": '{ kind = "boss", id = "trials", arena = { 35, 88 } }',
+    }, (9.2, 3)),
 ]
 
 HEADER = '''--!strict

@@ -483,6 +483,48 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
         "antF": [K(0, -20), K(0.1, 30), K(0.26, 0)],
         "antB": [K(0, -18), K(0.1, 32), K(0.26, 0)],
     }, loop=False)
+    # Catching a wall: a hard little squash against the stone before the slide.
+    r.clip("wallGrab", 0.16, {
+        "hips": [K(0, 0, -0.1, -0.1, 0.85, 1.12, "o"), K(0.16, 0, 0, -0.2, 1.04, 0.95)],
+        "body": [K(0, 22, -0.3), K(0.16, 10, -0.25)],
+        "armB": [K(0, -170), K(0.16, -140)],
+        "legB": [K(0, -80), K(0.16, -55)],
+        "legF": [K(0, 55), K(0.16, 35)],
+        "hem": [K(0, 20), K(0.16, -38)],
+        "antF": [K(0, 30), K(0.16, -30)],
+        "antB": [K(0, 32), K(0.16, -28)],
+    }, loop=False, events=[[0, "thud"]])
+    # ---- Nail arts ---------------------------------------------------------------------
+    # Dash Slash: the whole body flattens into a lunging thrust, blade straight ahead.
+    r.clip("dashSlash", 0.45, {
+        "root": [K(0, 0, 0, 0, 1.3, 0.82, "o"), K(0.16, 0, 0, 0, 1.2, 0.86), K(0.45, 0, 0, 0, 1, 1)],
+        "armF": [K(0, 60), K(0.04, 95, 0, 0, 1, 1, "o"), K(0.3, 90), K(0.45, 0)],
+        "nail": [K(0, -40), K(0.04, -125), K(0.3, -125), K(0.45, 0)],
+        "body": [K(0, -30, 0.2), K(0.16, -34, 0.3), K(0.45, 0)],
+        "legF": [K(0, -40), K(0.16, -70), K(0.45, 0)],
+        "legB": [K(0, -60), K(0.16, -80), K(0.45, 0)],
+        "hem": [K(0, 40), K(0.2, 50), K(0.45, 0)],
+        "armB": [K(0, -60), K(0.2, -80), K(0.45, 0)],
+        "antF": [K(0, 55), K(0.3, 60), K(0.45, 0)],
+        "antB": [K(0, 58), K(0.3, 62), K(0.45, 0)],
+        "head": [K(0, 10), K(0.45, 0)],
+    }, loop=False, events=[[0.04, "swing"]])
+    # Cyclone Slash: blade held straight out, spinning round and round.
+    spin = [K(0, 0, 0, 0, 1, 1, "l", 0)]
+    for i in range(1, 6):
+        spin.append(K(i * 0.13, 0, 0, 0.15, 1, 1, "l", -180 * i))
+    spin.append(K(0.8, 0, 0, 0, 1, 1, "io", -900))
+    r.clip("cyclone", 0.8, {
+        "root": spin,
+        "armF": [K(0, 0), K(0.06, 90), K(0.68, 92), K(0.8, 0)],
+        "nail": [K(0, 0), K(0.06, -130), K(0.68, -130), K(0.8, 0)],
+        "armB": [K(0, 0), K(0.06, -90), K(0.68, -92), K(0.8, 0)],
+        "legF": [K(0, 0), K(0.06, 30), K(0.68, 34), K(0.8, 0)],
+        "legB": [K(0, 0), K(0.06, -20), K(0.68, -24), K(0.8, 0)],
+        "hem": [K(0, 0), K(0.1, -40), K(0.68, -44), K(0.8, 0)],
+        "antF": [K(0, 0), K(0.1, 50), K(0.8, 0)],
+        "antB": [K(0, 0), K(0.1, 52), K(0.8, 0)],
+    }, loop=False, events=[[0.05, "swing"], [0.31, "swing"], [0.57, "swing"]])
     # ---- The combo ---------------------------------------------------------------------
     # Second strike: a rising backhand from low behind to high in front.
     r.clip("attackSide2", 0.32, {
@@ -555,6 +597,8 @@ def main():
         rigs += rigs_extra.all_rigs()
     except ImportError:
         pass
+    import rigs_champions  # the Hall of Trials' champions
+    rigs += rigs_champions.all_rigs()
     names = []
     for rig in rigs:
         with open(os.path.join(OUT, rig.name + ".json"), "w") as f:

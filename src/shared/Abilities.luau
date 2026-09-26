@@ -39,6 +39,12 @@ local Abilities: { [string]: Ability } = {
 		hint = "Press JUMP again while airborne to take flight once more.",
 		order = 5,
 	},
+	shade = {
+		attribute = "HasShade",
+		name = "Umbral Cloak",
+		hint = "Your dash turns to shadow and passes through enemies and attacks. It recharges in a moment.",
+		order = 6,
+	},
 }
 
 return Abilities

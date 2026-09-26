@@ -63,14 +63,16 @@ Vesperdeep is a 2D side-scroller: the camera looks at the caves from the side an
 | Jump (hold for height) | Space | A |
 | Nail strike (strike again quickly for a 3-hit combo) | J or left click | X |
 | Upward strike / downward strike in the air (pogo) | W + strike / S + strike | Up / down + X |
-| Cleaving Arc *(found later)* | Hold the strike button, release | Hold X |
+| Nail arts *(with the Cleaving Arc)*: hold strike until it glows, then release: moving = Great Slash, standing still = Cyclone Slash, during/just after a dash = Dash Slash | Hold the strike button, release | Hold X |
+| Wall cling / slide / wall jump: jump into any rough wall while holding toward it; you stick and slide until you jump off or hold away | Hold toward wall + Space | |
 | Dodge roll (brief invulnerability) | Q or C | L2 |
-| Dash *(found later)* | Shift | R1 / B |
+| Dash *(found later)*; with the Umbral Cloak it becomes a shadow dash through enemies and attacks | Shift | R1 / B |
 | Lumen Bolt *(found later)* | R | R2 |
 | Swing from a glowing ring (hold; release or jump to let go) | G | L3 / D-pad up |
 | Charge dash (hold to gather, release to launch; jump or hit a wall to stop) | V | D-pad down |
 | Soul scream (burst above you) / soul dive (plunge and explode) | W + R / S + R in the air | Up / down + R2 |
-| Travel between benches you've rested at | Rest at a bench → Travel | |
+| Travel between benches you've rested at (the Hall of Trials is always a stop) | Rest at a bench → Travel | |
+| Challenge a boss in the Hall of Trials | E at the Statue of Trials | Y |
 | Focus Soul to heal | Hold F or right click | L1 |
 | Talk / rest at bench | E | Y |
 | Charms (at a bench) | Tab | |
@@ -122,7 +124,7 @@ Phones and tablets get on-screen buttons.
 
 ## The world
 
-Eight regions, linked in loops so later abilities open shortcuts back through earlier ground.
+Eight regions, linked in loops so later abilities open shortcuts back through earlier ground, plus the **Hall of Trials**.
 
 | Region | Mood | Guardian | Reward |
 |---|---|---|---|
@@ -142,6 +144,12 @@ Eight regions, linked in loops so later abilities open shortcuts back through ea
 - **Lumen Bolt** wakes the sigil that seals the way into the Hollowroot.
 - **Wings** reach the high Sanctum door and many secrets.
 - **The Silkline** (from the start): hold G near a glowing ring to swing from it, pump the swing with the movement keys, and let go (or jump) at the top of the arc to fly. Rings hang over the Glowmire's gullies and lake, and one island there can only be reached this way.
+
+**The Hall of Trials:** reachable from any bench (Travel). Touch the **Statue of Trials** to pick a foe. Five **champions** made for the hall wait there, each unlocked by beating the one before: **Sessa, the Glaive Dancer** (a dragonfly duelist with a boomerang glaive, lunges and air dives), **Mirra, the Reed Skater** (a water strider who skates the floor, throws curving reed sickles and springs off the walls), **The Hollow Warden** (a grub in a giant suit of armour; mace slams, shockwaves, rubble rain and a rage phase), **Magister Vell, the Lantern Sorcerer** (teleports, seeking lanterns, light rings, plunges and a beam across the hall) and **Pyrrhe, the Ember Conductor** (teleports, fire bats, marching flame pillars, a flaming uppercut, air dives and an ember spiral). Beating Pyrrhe grants the **Umbral Cloak**: when recharged, your dash becomes a shadow that passes through enemies and attacks. Every story guardian you've beaten can be fought again there too. Dying in the hall costs nothing. The lobby has two rough-stone pillars for practising wall jumps.
+
+**Nail arts** (with the Cleaving Arc): hold the strike until it glows, then release. Release while moving for the **Great Slash**, standing still for the **Cyclone Slash** (a spinning flurry that hits five times), or during or just after a dash for the **Dash Slash** (a long lunging thrust).
+
+**Wall cling:** jump into any rough wall while holding toward it and you grab on. You then stick without holding anything and slide down at a steady speed. Jump to kick off (you can jump straight back onto the same wall to climb), or hold away for a moment to let go. A wall jump still works for a split second after leaving the wall.
 
 **Guardians:** every boss has its own arena, attack patterns and personality, with 2 or 3 **phases** that each open with a stagger and roar. Every attack is telegraphed: the boss glows hot and trembles before striking, and anything about to land (falling stone, crystal spires, ink, feathers) is **marked on the floor** first. Each fight opens with a **cinematic introduction** (gates slam, letterbox, camera pan, title card), and a bench waits just outside every arena.
 

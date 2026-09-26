@@ -27,7 +27,7 @@ function State.freeze(reason: string, on: boolean)
 	State.freezes[reason] = if on then true else nil
 end
 
-local UI_REASONS = { dialogue = true, charms = true, journal = true, memory = true }
+local UI_REASONS = { dialogue = true, charms = true, journal = true, memory = true, trials = true }
 
 -- True while a menu that needs the mouse cursor is open.
 function State.uiOpen(): boolean

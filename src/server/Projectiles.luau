@@ -17,6 +17,9 @@ type Projectile = {
 	damage: number,
 	expires: number,
 	passWalls: boolean,
+	accel: Vector3,
+	homing: number,
+	maxSpeed: number,
 }
 
 type Ring = {
@@ -39,6 +42,10 @@ export type Options = {
 	lifetime: number?,
 	damage: number?,
 	passWalls: boolean?,
+	-- Constant acceleration (e.g. opposite the throw for a blade that flies out and comes back).
+	accel: Vector3?,
+	-- Steers toward the nearest player by this much per second (0 = straight).
+	homing: number?,
 }
 
 local active: { Projectile } = {}
@@ -92,6 +99,9 @@ function Projectiles.spawn(opts: Options)
 		damage = opts.damage or 1,
 		expires = os.clock() + (opts.lifetime or 4),
 		passWalls = opts.passWalls == true,
+		accel = if opts.accel then Vector3.new(opts.accel.X, opts.accel.Y, 0) else Vector3.zero,
+		homing = opts.homing or 0,
+		maxSpeed = opts.velocity.Magnitude,
 	})
 end
 
@@ -155,7 +165,23 @@ function Projectiles.init(mapFolders: { Instance }, damage: (Player, number, Vec
 		for i = #active, 1, -1 do
 			local proj = active[i]
 			local from = proj.part.Position
-			proj.velocity += Vector3.new(0, -proj.gravity * dt, 0)
+			proj.velocity += Vector3.new(0, -proj.gravity * dt, 0) + proj.accel * dt
+			if proj.homing > 0 and #roots > 0 then
+				local best, bestD = nil, math.huge
+				for _, entry in roots do
+					local d = ((entry[2] :: BasePart).Position - from).Magnitude
+					if d < bestD then
+						best, bestD = (entry[2] :: BasePart).Position, d
+					end
+				end
+				if best and bestD > 0.5 then
+					local want = (best - from).Unit * proj.maxSpeed
+					proj.velocity = proj.velocity:Lerp(want, math.min(1, proj.homing * dt))
+					if Config.SIDE_VIEW then
+						proj.velocity = Vector3.new(proj.velocity.X, proj.velocity.Y, 0)
+					end
+				end
+			end
 			local step = proj.velocity * dt
 			local hitWall = false
 			if not proj.passWalls then

@@ -143,7 +143,15 @@ function PlayerService.sync(player: Player)
 	player:SetAttribute("Memories", setOf(data.memories))
 	player:SetAttribute("Switches", setOf(data.switches))
 	player:SetAttribute("Visited", setOf(data.visited))
-	player:SetAttribute("Stations", setOf((data :: any).stations or {}))
+	local stations = (data :: any).stations or {}
+	;(data :: any).stations = stations
+	-- The Hall of Trials can be reached from any bench.
+	for id in benchCFrames do
+		if string.sub(id, 1, 7) == "trials:" then
+			stations[id] = true
+		end
+	end
+	player:SetAttribute("Stations", setOf(stations))
 	player:SetAttribute("Bought", setOf(data.bought))
 	local masks = player:GetAttribute("Masks")
 	if typeof(masks) == "number" then
@@ -326,7 +334,10 @@ local function die(player: Player)
 	dead[player] = true
 	local data = dataByPlayer[player]
 	local root = rootOf(player)
-	if data and root then
+	-- Falling in the Hall of Trials costs nothing: it's only practice.
+	local zoneIndex = root and Grid.zoneAt(root.Position)
+	local inTrials = zoneIndex ~= nil and Zones[zoneIndex] ~= nil and Zones[zoneIndex].id == "trials"
+	if data and root and not inTrials then
 		if data.geo > 0 then
 			data.echo = { x = root.Position.X, y = root.Position.Y, z = root.Position.Z, geo = data.geo }
 			data.geo = 0
@@ -673,6 +684,17 @@ function PlayerService.init(infos)
 		local extra = if PlayerService.hasCharm(player, "mirror_shell") then 1.6 else 1
 		-- A little latency allowance on top of the sidestep itself.
 		dodgeUntil[player] = now + Config.DODGE_INVULN * extra + 0.08
+	end)
+
+	-- Umbral Cloak: a shadow dash is untouchable for a moment.
+	local lastShade: { [Player]: number } = {}
+	Net.event("Shade").OnServerEvent:Connect(function(player)
+		local now = os.clock()
+		if dead[player] or not player:GetAttribute("HasShade") or (lastShade[player] and now - lastShade[player] < Config.SHADE_COOLDOWN * 0.8) then
+			return
+		end
+		lastShade[player] = now
+		dodgeUntil[player] = math.max(dodgeUntil[player] or 0, now + Config.SHADE_INVULN + 0.08)
 	end)
 
 	Net.event("EnterZone").OnServerEvent:Connect(function(player, index: unknown)

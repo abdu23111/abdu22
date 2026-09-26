@@ -326,7 +326,7 @@ def characters(scene, zone, x0, x1, player_at=None, player_facing=(1, 0, 0), pla
             rig = ENEMY_RIGS[e["kind"]]
             y = e["p"][1] if e["kind"] in FLYERS else e["p"][1] - 2
             parts += rig_parts(rig, "idle", 0.3, [e["p"][0], y, e["p"][2]], (-1, 0, 0.3))
-    for b in scene["bosses"]:
+    for b in [b for b in scene["bosses"] if b["id"] != "trials"]:
         if b["z"] == zone and inside(b["p"]):
             parts += rig_parts(b["id"], "idle", 0.5, [b["p"][0], b["floor"], b["p"][2]], (-1, 0, 0.2))
     if player_at is not None:
@@ -476,6 +476,31 @@ def combat_shots(scene):
     return shots
 
 
+# The Hall of Trials' champions, each posed in the arena facing the hero.
+CHAMPIONS = [("sessa", "windup", 0.1), ("mirra", "attack", 0.1), ("carapace", "windup", 0.2), ("vell", "shoot", 0.08), ("pyrrhe", "uppercut", 0.3)]
+
+
+def trial_shots(scene):
+    shots = []
+    try:
+        zi = zone_by_id(scene, "trials")
+    except KeyError:
+        return shots
+    boss = next((b for b in scene.get("bosses", []) if b.get("z") == zi), None)
+    x0 = scene["zones"][zi]["min"][0]
+    ax = (boss["p"][0] if boss else x0 + 180)
+    for name, clip, t in CHAMPIONS:
+        y = floor_under(scene, ax, 0, (boss["p"][1] if boss else 60) + 2)
+        bpos = [ax, y + (10 if name == "vell" else 0), 0]
+        hero = [ax - 16, y, 0]
+        extra = rig_parts(name, clip, t, bpos, (-1, 0, 0))
+        focus = [ax - 6, y + 6, 0]
+        eye = [focus[0], focus[1] + 2, 44]
+        shots.append(dict(name=f"trials_{name}", zone=zi, x0=ax - 70, x1=ax + 70, eye=eye, target=focus, player_at=hero,
+                          player_facing=(1, 0, 0), clip="idle", fov=40, extra=extra))
+    return shots
+
+
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -492,7 +517,7 @@ def main():
     scene = load_scene()
     os.makedirs(os.path.join(WEB, "shots"), exist_ok=True)
     os.makedirs(SHOTS_DIR, exist_ok=True)
-    shots = default_shots(scene) + combat_shots(scene)
+    shots = default_shots(scene) + combat_shots(scene) + trial_shots(scene)
     only = sys.argv[1:]
     if only:
         shots = [s for s in shots if any(s["name"].startswith(o) for o in only)]

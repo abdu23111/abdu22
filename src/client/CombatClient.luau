@@ -393,12 +393,93 @@ local function stopCharge()
 	end
 end
 
+-- Nail arts. Release a full charge...
+--   while dashing (or just after): Dash Slash, a lunging thrust along the dash;
+--   standing still with no direction held: Cyclone Slash, a spinning flurry;
+--   otherwise: Great Slash (the Cleaving Arc), one huge sweep ahead.
+local function dashSlash(root: BasePart)
+	local look = State.facingVector
+	local facing = if look.X < 0 then -1 else 1
+	nextAttackAt = os.clock() + 0.5
+	Net.event("Attack"):FireServer("dashslash", look, 1)
+	Characters.action("dashSlash")
+	Sfx.play("cleave", 1.15)
+	Movement.shove(look * 72, 0.16)
+	CameraController.shake(0.5)
+	for i = 0, 5 do
+		task.delay(i * 0.025, function()
+			Fx.afterimage(Characters.localRig(), Color3.fromRGB(255, 200, 255), 0.5 + i * 0.08, 0.2)
+		end)
+	end
+	task.delay(0.06, function()
+		if root.Parent then
+			Fx.arc(root.Position + Vector3.new(0, 0.4, 0), facing, 7.5, 18, -18, { color = Color3.fromRGB(255, 235, 255), glow = CLEAVE_COLOR, thickness = 0.7, sweep = 0.04, life = 0.22, segments = 10 }, root)
+			-- A bright streak along the lunge.
+			local from, to = root.Position - look * 8, root.Position + look * 3
+			local mid = (from + to) / 2
+			local streak = Fx.part({
+				Size = Vector3.new(0.35, 0.35, (to - from).Magnitude),
+				CFrame = CFrame.lookAt(mid, to),
+				Color = CLEAVE_COLOR,
+				Material = Enum.Material.Neon,
+				Transparency = 0.2,
+			})
+			Fx.fade(streak, 0.25, { Size = Vector3.new(0.05, 0.05, (to - from).Magnitude * 1.1) })
+		end
+	end)
+	task.delay(0.1, function()
+		if not root.Parent then
+			return
+		end
+		local hits = localHits(CFrame.lookAt(root.Position, root.Position + look), "dashslash", 1)
+		if #hits > 0 then
+			Fx.impact(root.Position + look * 3, look, CLEAVE_COLOR, true)
+			Characters.hitStop(0.12)
+			CameraController.shake(0.9)
+			Sfx.play("impact")
+		end
+	end)
+end
+
+local function cycloneSlash(root: BasePart)
+	nextAttackAt = os.clock() + 0.85
+	local look = State.facingVector
+	Net.event("Attack"):FireServer("cyclone", look, 1)
+	Characters.action("cyclone")
+	Sfx.play("cleave", 0.9)
+	Movement.pogo()
+	for i = 0, Config.CYCLONE_HITS - 1 do
+		task.delay(i * 0.13, function()
+			if not root.Parent then
+				return
+			end
+			local facing = if i % 2 == 0 then 1 else -1
+			Fx.arc(root.Position + Vector3.new(0, 0.6, 0), facing, 6.2, 170, -10, { color = Color3.fromRGB(255, 235, 255), glow = CLEAVE_COLOR, thickness = 0.55, sweep = 0.06, life = 0.16, segments = 12 }, root)
+			Sfx.play("slash", 1.1 + i * 0.04)
+			local hits = localHits(CFrame.lookAt(root.Position, root.Position + look), "cyclone", 1)
+			if #hits > 0 then
+				local nearest = hits[1]
+				Fx.impact(root.Position:Lerp(nearest.Position, 0.6), Vector3.new(facing, 0, 0), CLEAVE_COLOR, false)
+				Characters.hitStop(0.04)
+				CameraController.shake(0.3)
+			end
+		end)
+	end
+end
+
 local function releaseAttack()
 	local ready = chargeReady
 	stopCharge()
-	if ready and State.root and not State.frozen() then
+	local root = State.root
+	if ready and root and not State.frozen() then
 		lastAttack = os.clock()
-		swing("cleave")
+		if Movement.recentlyDashed(0.28) then
+			dashSlash(root)
+		elseif Movement.moveWorld().Magnitude < 0.2 and not Input.lookUp() and not Input.lookDown() then
+			cycloneSlash(root)
+		else
+			swing("cleave")
+		end
 	end
 end
 
@@ -683,9 +764,24 @@ function CombatClient.init()
 
 	local DUST = Color3.fromRGB(165, 160, 165)
 
-	Movement.onDash = function(dir: Vector3)
+	Movement.onDash = function(dir: Vector3, shade: boolean)
 		local root = State.root
 		if not root then
+			return
+		end
+		if shade then
+			-- Umbral Cloak: the body dissolves into black smoke for the length of the dash.
+			Characters.shade(Config.SHADE_INVULN)
+			CameraController.shake(0.25)
+			for i = 0, 7 do
+				task.delay(i * 0.022, function()
+					Fx.afterimage(Characters.localRig(), Color3.fromRGB(6, 6, 10), 0.25 + i * 0.07, 0.35)
+					if root.Parent then
+						Fx.puff(root.Position + Vector3.new(0, math.random() * 2 - 0.5, 0), Color3.fromRGB(10, 10, 16), 1.8, 0.5)
+					end
+				end)
+			end
+			Fx.ring(root.Position, Color3.fromRGB(20, 18, 30), 5, 0.3, 0.3)
 			return
 		end
 		for i = 0, 4 do
@@ -694,6 +790,15 @@ function CombatClient.init()
 			end)
 		end
 		Fx.puff(root.Position - Vector3.new(0, 2.4, 0) - dir * 1.5, Color3.fromRGB(200, 200, 220), 2.6, 0.3)
+	end
+
+	-- The shadow gathers back around the cloak when the Umbral dash is ready again.
+	Movement.onShadeReady = function()
+		local root = State.root
+		if root then
+			Fx.puff(root.Position, Color3.fromRGB(12, 12, 18), 2.2, 0.4)
+			Sfx.play("ui", 0.6)
+		end
 	end
 
 	Movement.onDodge = function(_dir: Vector3)
@@ -816,6 +921,15 @@ function CombatClient.init()
 		if root then
 			Fx.puff(root.Position - normal * 1.2, DUST, 1.6, 0.3)
 			Fx.sparks(root.Position - normal * 1.4, Color3.fromRGB(220, 215, 200), 4, 0.8, normal)
+		end
+	end
+
+	Movement.onWallGrab = function(normal: Vector3)
+		Characters.action("wallGrab")
+		Sfx.play("land", 1.3)
+		local root = State.root
+		if root then
+			Fx.puff(root.Position - normal * 1.2 + Vector3.new(0, 1, 0), DUST, 1.1, 0.25)
 		end
 	end
 

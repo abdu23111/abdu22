@@ -114,10 +114,12 @@ function Combat.init(infos, PlayerService)
 	end
 
 	Net.event("Attack").OnServerEvent:Connect(function(player: Player, direction: unknown, aim: unknown, stage: unknown)
-		if direction ~= "side" and direction ~= "up" and direction ~= "down" and direction ~= "cleave" then
+		local art = direction == "cleave" or direction == "dashslash" or direction == "cyclone"
+		if direction ~= "side" and direction ~= "up" and direction ~= "down" and not art then
 			return
 		end
-		if direction == "cleave" and not player:GetAttribute("HasCleave") then
+		-- Nail arts (Great Slash, Dash Slash, Cyclone Slash) all come with the Cleaving Arc.
+		if art and not player:GetAttribute("HasCleave") then
 			return
 		end
 		local now = os.clock()
@@ -161,6 +163,12 @@ function Combat.init(infos, PlayerService)
 		if direction == "cleave" then
 			damage = math.floor(damage * Config.CLEAVE_MULT + 0.5)
 			kind = "cleave"
+		elseif direction == "dashslash" then
+			damage = math.floor(damage * Config.DASH_SLASH_MULT + 0.5)
+			kind = "cleave"
+		elseif direction == "cyclone" then
+			damage = math.max(1, math.floor(damage * Config.CYCLONE_MULT + 0.5))
+			kind = "cleave"
 		elseif comboStage == 3 then
 			damage = math.floor(damage * 1.6 + 0.5)
 			kind = "finish"
@@ -172,7 +180,24 @@ function Combat.init(infos, PlayerService)
 				PlayerService.addSoul(player, Config.SOUL_PER_HIT)
 			end
 		end
-		if comboStage == 3 then
+		if direction == "cyclone" then
+			-- A spinning flurry: several hits around the body as it turns.
+			task.spawn(function()
+				for i = 1, Config.CYCLONE_HITS do
+					local r = PlayerService.rootOf(player)
+					if not r or (player:GetAttribute("Masks") or 0) <= 0 then
+						return
+					end
+					boxCFrame, size = Hitbox.nail(CFrame.lookAt(r.Position, r.Position + look), "cyclone", reach)
+					size += Vector3.new(1.5, 1.5, 1.5)
+					local parts = workspace:GetPartBoundsInBox(boxCFrame, size, params)
+					if strike(player, parts, damage, if i % 2 == 0 then look else -look, kind, {}) and i == 1 then
+						PlayerService.addSoul(player, Config.SOUL_PER_HIT)
+					end
+					task.wait(0.13)
+				end
+			end)
+		elseif comboStage == 3 then
 			-- The finisher lands on its contact frame, after the wind-up (matching the client).
 			task.delay(0.12, function()
 				local r = PlayerService.rootOf(player)

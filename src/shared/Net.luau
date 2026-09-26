@@ -29,10 +29,13 @@ Net.NAMES = {
 	"BuyWare",
 	"Bolt",
 	"Dodge",
+	"Shade",
 	"EnterZone",
 	"Spell",
 	"Travel",
+	"Challenge",
 	-- server -> client
+	"TrialMenu",
 	"Knockback",
 	"HazardRespawn",
 	"Notify",

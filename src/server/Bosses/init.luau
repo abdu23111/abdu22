@@ -48,6 +48,9 @@ type Fight = {
 	hazards: { Hazard },
 	temp: { Instance },
 	stateFolder: Folder,
+	trial: boolean?, -- the Hall of Trials arena: fights start from the statue, any boss
+	rigId: string?, -- which boss is being fought in a trial
+	rematch: boolean?, -- a story boss fought again (no rewards)
 }
 
 local fights: { Fight } = {}
@@ -104,7 +107,27 @@ local function endFight(fight: Fight, victory: boolean)
 	setGates(fight, false)
 	fight.stateFolder:SetAttribute("Active", false)
 	fight.state = "cooldown"
-	if victory then
+	if victory and fight.trial then
+		local def, id = fight.def, fight.rigId :: string
+		for player in fight.participants do
+			if player.Parent then
+				if fight.rematch then
+					PlayerService.addGeo(player, 25)
+					PlayerService.notify(player, "Trial Won", def.name .. " is beaten again.", "info")
+				elseif not PlayerService.hasDefeated(player, "trial_" .. id) then
+					PlayerService.markBoss(player, "trial_" .. id, false)
+					PlayerService.addGeo(player, def.geo)
+					if def.reward then
+						PlayerService.grantAbility(player, def.reward)
+					else
+						PlayerService.notify(player, "Champion Defeated", "A new challenger waits at the statue.", "ability")
+					end
+				else
+					PlayerService.addGeo(player, 25)
+				end
+			end
+		end
+	elseif victory then
 		local def = fight.def
 		for player in fight.participants do
 			if player.Parent then
@@ -143,7 +166,7 @@ local function createBoss(fight: Fight)
 		Parent = model,
 	})
 	model.PrimaryPart = hitbox
-	model:SetAttribute("Rig", fight.info.id)
+	model:SetAttribute("Rig", fight.rigId or fight.info.id)
 	model:SetAttribute("Anim", "idle")
 	model:SetAttribute("Anchor", def.size.Y / 2)
 	model:SetAttribute("Boss", true)
@@ -357,6 +380,9 @@ local function createBoss(fight: Fight)
 			gravity = opts.gravity,
 			lifetime = opts.lifetime,
 			passWalls = opts.passWalls,
+			accel = opts.accel,
+			homing = opts.homing,
+			damage = opts.damage,
 		})
 	end
 	-- Fire `count` projectiles fanned horizontally around `dir`.
@@ -570,6 +596,73 @@ local function createBoss(fight: Fight)
 			error(err)
 		end
 	end
+	-- Keep a point inside the arena's air (for flying and leaping bosses).
+	function b.clampAir(p: Vector3): Vector3
+		local half = def.size.Y / 2
+		return Vector3.new(math.clamp(p.X, b.minX, b.maxX), math.clamp(p.Y, b.groundY, info.ceilY - half - 2), math.clamp(p.Z, b.minZ, b.maxZ))
+	end
+	-- Fly in a straight line (no floor snapping).
+	function b.flyTo(target: Vector3, speed: number, anim: string?)
+		target = b.clampAir(target)
+		local dir = flat(target - b.position)
+		if dir.Magnitude > 0 then
+			b.facing = dir
+		end
+		b.setAnim(anim or "move")
+		while (target - b.position).Magnitude > 0.05 do
+			local dt = b.step()
+			local delta = target - b.position
+			local stepLen = speed * dt
+			b.position = if delta.Magnitude <= stepLen then target else b.position + delta.Unit * stepLen
+		end
+	end
+	-- Blink away in a puff and reappear somewhere else.
+	function b.teleport(to: Vector3, color: Color3?)
+		b.setAnim("vanish", true)
+		Enemies.burst(b.position, color or Color3.fromRGB(230, 225, 255), 18)
+		b.wait(0.18)
+		b.hidden = true
+		local away = b.position
+		b.position = Vector3.new(away.X, b.floorY - 40, away.Z)
+		b.wait(0.22)
+		b.position = b.clampAir(to)
+		b.hidden = false
+		Enemies.burst(b.position, color or Color3.fromRGB(230, 225, 255), 18)
+		b.faceTarget()
+		b.setAnim("appear", true)
+		b.wait(0.15)
+	end
+	-- A column of danger rising from the floor at `x` (fire, light, thorns).
+	function b.pillar(x: number, width: number, t: number, color: Color3)
+		local h = info.ceilY - info.floorY
+		local cf = CFrame.new(x, info.floorY + h / 2, 0)
+		local col = make("Part", {
+			Anchored = true,
+			CanCollide = false,
+			CanQuery = false,
+			CanTouch = false,
+			CastShadow = false,
+			Material = Enum.Material.Neon,
+			Color = color,
+			Transparency = 0.15,
+			Size = Vector3.new(width * 0.3, h, 1.2),
+			CFrame = cf,
+			Parent = workspace,
+		})
+		make("PointLight", { Range = 26, Brightness = 3, Color = color, Parent = col })
+		temp(col, t + 0.3)
+		TweenService:Create(col, TweenInfo.new(0.1), { Size = Vector3.new(width, h, 1.2) }):Play()
+		task.delay(t, function()
+			if col.Parent then
+				TweenService:Create(col, TweenInfo.new(0.25), { Transparency = 1, Size = Vector3.new(0.2, h, 1.2) }):Play()
+			end
+		end)
+		b.hazard(cf, Vector3.new(width, h, 4), t)
+	end
+	-- A warning strip on the floor where a pillar will rise.
+	function b.pillarWarn(x: number, width: number, t: number)
+		b.marker(Vector3.new(x, b.floorY, 0), width / 2, t)
+	end
 	return b
 end
 
@@ -675,12 +768,99 @@ local function startFight(fight: Fight, players: { Player })
 	end)
 end
 
+-- ===== The Hall of Trials =====
+
+-- The hall's own champions, beaten in order; then every story boss you have already felled.
+local CHAMPIONS = { "sessa", "mirra", "carapace", "vell", "pyrrhe" }
+local STORY = { "gravelmaw", "vantis", "widow", "quartzelle", "murrow", "echo", "asterion" }
+local trialFight: Fight? = nil
+
+local function trialList(player: Player)
+	local list = {}
+	local open = true
+	for _, id in CHAMPIONS do
+		local def = DEFS[id]
+		local beaten = PlayerService.hasDefeated(player, "trial_" .. id)
+		table.insert(list, { id = id, name = def.name, title = def.title, unlocked = open, beaten = beaten, champion = true })
+		open = open and beaten
+	end
+	for _, id in STORY do
+		local def = DEFS[id]
+		if def then
+			local beaten = PlayerService.hasDefeated(player, id)
+			table.insert(list, { id = id, name = def.name, title = def.title, unlocked = beaten, beaten = beaten, champion = false })
+		end
+	end
+	return list
+end
+
+local function challenge(player: Player, id: unknown)
+	local fight = trialFight
+	if not fight or typeof(id) ~= "string" or fight.state ~= "idle" or not DEFS[id] then
+		return
+	end
+	if PlayerService.zoneOf(player) ~= fight.info.zone or (player:GetAttribute("Masks") or 0) <= 0 then
+		return
+	end
+	local allowed = false
+	for _, entry in trialList(player) do
+		if entry.id == id and entry.unlocked then
+			allowed = true
+		end
+	end
+	if not allowed then
+		return
+	end
+	local def = DEFS[id]
+	fight.def = def
+	fight.rigId = id
+	fight.rematch = table.find(STORY, id) ~= nil
+	fight.stateFolder:SetAttribute("Name", def.name)
+	fight.stateFolder:SetAttribute("Title", def.title)
+	fight.stateFolder:SetAttribute("Music", def.music or "boss")
+	-- Step into the arena, a little in from its left gate.
+	local info = fight.info
+	local character = player.Character
+	if character then
+		local at = Vector3.new(info.minX + 14, info.floorY + 3.2, 0)
+		character:PivotTo(CFrame.lookAt(at, at + Vector3.xAxis))
+		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root then
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+	end
+	task.wait(0.35)
+	if fight.state == "idle" then
+		startFight(fight, { player })
+	end
+end
+
 function Bosses.init(infos, playerService)
 	PlayerService = playerService
 	local stateRoot = make("Folder", { Name = "BossState", Parent = ReplicatedStorage })
 	for _, info in infos do
 		local bossInfo = info.boss
-		if bossInfo then
+		if bossInfo and bossInfo.id == "trials" then
+			local stateFolder = make("Folder", { Name = "trials", Parent = stateRoot })
+			stateFolder:SetAttribute("Name", "")
+			stateFolder:SetAttribute("Title", "")
+			stateFolder:SetAttribute("Zone", bossInfo.zone)
+			stateFolder:SetAttribute("Music", "boss")
+			stateFolder:SetAttribute("Active", false)
+			local fight: Fight = {
+				info = bossInfo,
+				def = nil,
+				state = "idle",
+				participants = {},
+				boss = nil,
+				hazards = {},
+				temp = {},
+				stateFolder = stateFolder,
+				trial = true,
+			}
+			trialFight = fight
+			table.insert(fights, fight)
+		elseif bossInfo then
 			local def = DEFS[bossInfo.id]
 			assert(def, "No boss definition for " .. bossInfo.id)
 			local stateFolder = make("Folder", { Name = bossInfo.id, Parent = stateRoot })
@@ -702,10 +882,32 @@ function Bosses.init(infos, playerService)
 		end
 	end
 
+	-- The statue in the Hall of Trials offers the list of foes; the client picks one.
+	local world = workspace:FindFirstChild("World")
+	if world then
+		for _, inst in world:GetDescendants() do
+			if inst:IsA("ProximityPrompt") then
+				local model = inst:FindFirstAncestorWhichIsA("Model")
+				if model and model.Name == "TrialStatue" then
+					inst.Triggered:Connect(function(player)
+						if trialFight and trialFight.state == "idle" then
+							Net.event("TrialMenu"):FireClient(player, trialList(player))
+						else
+							PlayerService.notify(player, "The hall is busy.", "A trial is already under way.", "info")
+						end
+					end)
+				end
+			end
+		end
+	end
+	Net.event("Challenge").OnServerEvent:Connect(challenge)
+
 	RunService.Heartbeat:Connect(function()
 		local now = os.clock()
 		for _, fight in fights do
-			if fight.state == "idle" then
+			if fight.state == "idle" and fight.trial then
+				continue
+			elseif fight.state == "idle" then
 				local inside = arenaPlayers(fight.info)
 				for _, player in inside do
 					if not PlayerService.hasDefeated(player, fight.info.id) then

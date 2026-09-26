@@ -268,6 +268,18 @@ local Dialogue: { [string]: Speaker } = {
 			},
 		},
 	},
+	tablet_trials = {
+		name = "Hall Inscription",
+		sets = {
+			{
+				lines = {
+					"'THOSE WHO FELL HERE STILL REMEMBER THE FIGHT. TOUCH THE STATUE AND NAME ONE.'",
+					"'FIVE CHAMPIONS KEEP THIS HALL. BEAT EACH IN TURN, AND THE LAST WILL LEND YOU ITS SHADOW.'",
+					"Scratched beneath: 'climb the pillars. wall to wall. don't look down.'",
+				},
+			},
+		},
+	},
 }
 
 return Dialogue

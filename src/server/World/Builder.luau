@@ -410,6 +410,8 @@ function Builder.build(): { ZoneInfo }
 						Props.pickup(itemId, "memory", spec.id :: string, pos, Color3.fromRGB(255, 244, 214), items)
 					elseif spec.kind == "altar" then
 						Props.altar(floorPos, interact)
+					elseif spec.kind == "trial" then
+						Props.trialStatue(floorPos, interact)
 					elseif spec.kind == "boss" then
 						local arena = spec.arena :: { number }
 						local ox = Grid.originX(zoneIndex)

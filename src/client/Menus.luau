@@ -421,6 +421,65 @@ function Menus.init()
 		setCharms(false)
 	end)
 
+	-- The Hall of Trials: pick a foe at the statue.
+	local trialFrame = panel({ Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(520, 480), Parent = gui })
+	text({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 34), TextSize = 30, Text = "HALL OF TRIALS", Parent = trialFrame })
+	text({ Position = UDim2.fromOffset(0, 46), Size = UDim2.new(1, 0, 0, 20), TextSize = 16, TextColor3 = Color3.fromRGB(170, 168, 190), Text = "Name a foe to face it again. Falling here costs nothing.", Parent = trialFrame })
+	local trialList = new("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(20, 76),
+		Size = UDim2.new(1, -40, 1, -140),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = trialFrame,
+	}, {
+		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	local function closeTrials()
+		trialFrame.Visible = false
+		State.freeze("trials", false)
+	end
+	button({ Text = "Leave", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(180, 40), Parent = trialFrame }, closeTrials)
+	Net.event("TrialMenu").OnClientEvent:Connect(function(list: any)
+		for _, c in trialList:GetChildren() do
+			if c:IsA("GuiButton") or c:IsA("TextLabel") then
+				c:Destroy()
+			end
+		end
+		local order = 0
+		local lastChampion: boolean? = nil
+		for _, entry in list do
+			if entry.champion ~= lastChampion then
+				lastChampion = entry.champion
+				order += 1
+				text({ Text = if entry.champion then "— CHAMPIONS OF THE HALL —" else "— FOES OF VESPERDEEP —", TextSize = 18, TextColor3 = Color3.fromRGB(226, 190, 120), Size = UDim2.new(1, -10, 0, 26), LayoutOrder = order, Parent = trialList })
+			end
+			order += 1
+			local label = if entry.unlocked then string.format("%s%s  —  %s", if entry.beaten then "✦ " else "", entry.name, entry.title) else "???"
+			local b = button({ Text = label, TextSize = 19, Size = UDim2.new(1, -10, 0, 40), LayoutOrder = order, Parent = trialList }, function()
+				if not entry.unlocked then
+					HUD.notify("Sealed", if entry.champion then "Beat the champion before it first." else "Defeat this foe in the kingdom first.", "info")
+					return
+				end
+				closeTrials()
+				task.spawn(function()
+					local Fade = require(script.Parent.Fade)
+					Fade.out(0.3)
+					Net.event("Challenge"):FireServer(entry.id)
+					task.wait(0.4)
+					Fade.into(0.4)
+				end)
+			end)
+			if not entry.unlocked then
+				b.TextColor3 = Color3.fromRGB(110, 108, 124)
+			end
+		end
+		trialFrame.Visible = true
+		State.freeze("trials", true)
+	end)
+
 	for _, attr in { "CharmsOwned", "CharmsEquipped", "Notches" } do
 		player:GetAttributeChangedSignal(attr):Connect(refreshCharms)
 	end
@@ -444,6 +503,9 @@ function Menus.init()
 
 	UserInputService.InputBegan:Connect(function(inputObj, processed)
 		if not talking then
+			if trialFrame.Visible and (inputObj.KeyCode == Enum.KeyCode.Escape or inputObj.KeyCode == Enum.KeyCode.ButtonB) then
+				closeTrials()
+			end
 			if charmsOpen and (inputObj.KeyCode == Enum.KeyCode.Escape or inputObj.KeyCode == Enum.KeyCode.ButtonB) then
 				setCharms(false)
 			end

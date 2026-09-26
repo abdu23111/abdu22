@@ -20,7 +20,7 @@ local player = Players.LocalPlayer
 
 local Movement = {}
 Movement.onTeleport = nil :: ((Vector3?) -> ())?
-Movement.onDash = nil :: ((Vector3) -> ())?
+Movement.onDash = nil :: ((Vector3, boolean) -> ())? -- direction, shadow dash
 Movement.onDoubleJump = nil :: (() -> ())?
 Movement.onDodge = nil :: ((Vector3) -> ())?
 Movement.onLand = nil :: ((Vector3, number) -> ())?
@@ -28,6 +28,8 @@ Movement.onStep = nil :: ((Vector3) -> ())?
 Movement.onJump = nil :: (() -> ())?
 Movement.onHurt = nil :: (() -> ())?
 Movement.onWallJump = nil :: ((Vector3) -> ())?
+Movement.onWallGrab = nil :: ((Vector3) -> ())?
+Movement.onShadeReady = nil :: (() -> ())?
 Movement.onDiveLand = nil :: ((Vector3) -> ())?
 Movement.onCdash = nil :: ((string, Vector3?) -> ())? -- "charge" | "ready" | "launch" | "stop" | "cancel"
 Movement.onSwing = nil :: ((Vector3?) -> ())? -- anchor when a swing starts, nil when it ends
@@ -43,6 +45,8 @@ local dashRequestedAt = -1
 local dashUntil = 0
 local dashDir = Vector3.xAxis
 local dashCooldownUntil = 0
+local shadeReadyAt = 0
+local lastDashAt = -1
 local dodgeRequestedAt = -1
 local dodgeUntil = 0
 local dodgeDir = Vector3.xAxis
@@ -56,6 +60,10 @@ local lastSafeCheck = 0
 local doorCooldownUntil = 0
 local lastStepDust = 0
 local wallNormal: Vector3? = nil
+local lastWallNormal: Vector3? = nil
+local lastWallAt = -1
+local wallRegrabAt = 0
+local awayHeld = 0
 local swing: { anchor: Vector3, length: number }? = nil
 local swingCooldownUntil = 0
 -- Downward dive (spell) and the charge dash.
@@ -157,6 +165,11 @@ end
 function Movement.startDive()
 	diving = true
 	dashUntil, dodgeUntil, lockUntil = 0, 0, 0
+end
+
+-- True during a dash and for a short moment after it (for the Dash Slash).
+function Movement.recentlyDashed(window: number): boolean
+	return os.clock() - lastDashAt <= window
 end
 
 function Movement.isDiving(): boolean
@@ -475,21 +488,52 @@ local function step(dt: number)
 		humanoid.AutoRotate = not (dashing or dodging or wallNormal ~= nil)
 	end
 
-	-- Wall cling: jump into a rough wall while holding toward it.
+	-- Wall cling, Hollow Knight style: touch a rough wall in the air while holding toward it
+	-- and you grab on. After that it sticks without holding anything: you slide down at a
+	-- steady speed until you jump off, hold away for a moment, touch the floor or run out of
+	-- wall. Upward speed dies quickly on the grab, so every wall jump gains a little height and
+	-- zig-zagging between walls (or jumping back onto the same wall) climbs.
+	local prevWall = wallNormal
 	wallNormal = nil
-	-- Wall slide and wall jump are always available (the Thorn Claws are no longer needed).
-	if not grounded and not dashing and not locked and move.Magnitude > 0.3 then
-		local hit = workspace:Raycast(root.Position, move.Unit * 2.2, wallParams)
-		if hit and math.abs(hit.Normal.Y) < 0.4 and not hit.Instance:GetAttribute("NoCling") then
-			wallNormal = flat(hit.Normal)
+	if not grounded and not dashing and not locked and now >= wallRegrabAt then
+		local probe: Vector3? = if prevWall then -prevWall elseif move.Magnitude > 0.3 then move.Unit else nil
+		if probe then
+			local chest = workspace:Raycast(root.Position + Vector3.new(0, 0.6, 0), probe * 2.4, wallParams)
+			local feet = workspace:Raycast(root.Position - Vector3.new(0, 1.8, 0), probe * 2.4, wallParams)
+			local hit = chest or feet
+			if hit and chest and math.abs(hit.Normal.Y) < 0.4 and not hit.Instance:GetAttribute("NoCling") then
+				local n = flat(hit.Normal)
+				-- Holding away lets go after a short grace (long enough to buffer a wall jump).
+				if prevWall and move.Magnitude > 0.3 and move:Dot(n) > 0.5 then
+					awayHeld += dt
+				else
+					awayHeld = 0
+				end
+				if awayHeld < 0.14 then
+					wallNormal = n
+				end
+			end
 		end
 	end
+	if not wallNormal then
+		awayHeld = 0
+	end
 	if wallNormal then
+		if not prevWall then
+			if Movement.onWallGrab then
+				Movement.onWallGrab(wallNormal)
+			end
+		end
+		lastWallAt = now
+		lastWallNormal = wallNormal
 		usedDouble = false
 		dashReady = true
-		if v.Y < -Config.WALL_SLIDE_SPEED then
-			v = Vector3.new(v.X, -Config.WALL_SLIDE_SPEED, v.Z)
-		end
+		-- Kill upward speed fast, then slide at a constant rate.
+		local slide = -Config.WALL_SLIDE_SPEED
+		local vy = if v.Y > slide then math.max(slide, v.Y - 260 * dt) else slide
+		-- A soft inward push keeps the body touching the rock.
+		local hug = -wallNormal * 3
+		v = Vector3.new(hug.X, vy, hug.Z)
 		root.CFrame = CFrame.lookAt(root.Position, root.Position + wallNormal)
 	end
 
@@ -504,15 +548,19 @@ local function step(dt: number)
 			if Movement.onJump then
 				Movement.onJump()
 			end
-		elseif wallNormal then
-			local push = wallNormal * Config.WALL_JUMP_PUSH
+		elseif wallNormal or (lastWallNormal and now - lastWallAt <= Config.WALL_COYOTE) then
+			local n = (wallNormal or lastWallNormal) :: Vector3
+			wallNormal = nil
+			lastWallAt = -1
+			wallRegrabAt = now + Config.WALL_JUMP_LOCK
+			local push = n * Config.WALL_JUMP_PUSH
 			v = Vector3.new(push.X, Config.JUMP_VELOCITY, push.Z)
 			Movement.shove(push, Config.WALL_JUMP_LOCK)
 			jumped = true
 			-- Face away from the wall as you kick off it.
-			root.CFrame = CFrame.lookAt(root.Position, root.Position + wallNormal)
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + n)
 			if Movement.onWallJump then
-				Movement.onWallJump(wallNormal)
+				Movement.onWallJump(n)
 			end
 		elseif State.hasAbility("HasWings") and not usedDouble and not grounded then
 			usedDouble = true
@@ -552,9 +600,22 @@ local function step(dt: number)
 		end
 		dashing = true
 		root.CFrame = CFrame.lookAt(root.Position, root.Position + dashDir)
-		Sfx.play("dash")
+		lastDashAt = now
+		-- Umbral Cloak: when recharged, the dash turns to shadow and passes through harm.
+		local shade = State.hasAbility("HasShade") and now >= shadeReadyAt
+		if shade then
+			shadeReadyAt = now + Config.SHADE_COOLDOWN
+			State.invulnUntil = math.max(State.invulnUntil, now + Config.SHADE_INVULN)
+			Net.event("Shade"):FireServer()
+			task.delay(Config.SHADE_COOLDOWN, function()
+				if Movement.onShadeReady then
+					Movement.onShadeReady()
+				end
+			end)
+		end
+		Sfx.play("dash", if shade then 0.8 else 1)
 		if Movement.onDash then
-			Movement.onDash(dashDir)
+			Movement.onDash(dashDir, shade)
 		end
 	end
 
