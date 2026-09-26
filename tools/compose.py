@@ -1,13 +1,14 @@
-"""Procedurally composes Vesperdeep's original soundtrack.
+"""Procedurally composes Vesperdeep's original soundtrack and sound effects.
 
 Every track is synthesised from scratch (additive piano, music box, harp, choir pads,
 bowed strings, drums) and rendered as a seamless loop into assets/music/*.ogg.
+Sound effects (slashes, hits, roars, chimes...) are rendered into assets/sfx/*.ogg.
 
     pip install numpy scipy soundfile
     python tools/compose.py
 
 Upload the resulting files to Roblox (Creator Hub or Studio's Asset Manager) and paste
-the asset ids into src/shared/Config.luau -> Config.MUSIC.
+the asset ids into src/shared/Config.luau -> Config.MUSIC (and Config.SFX for effects).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from scipy.signal import butter, fftconvolve, lfilter
 
 SR = 44100
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "music")
+SFX_OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "sfx")
 
 NOTE_INDEX = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6,
               "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
@@ -355,6 +357,175 @@ def ending_theme():
     tr.render("ending", 3.5, 0.45)
 
 
+def glimmerdeep():
+    """Crystal caves: glassy arpeggios over a shimmering pad. B minor, 76 bpm."""
+    rng = np.random.default_rng(53)
+    prog = [("B2", "min"), ("G2", "maj7"), ("D3", "maj"), ("A2", "sus"),
+            ("B2", "min"), ("E3", "min"), ("G2", "maj7"), ("F#2", "sus")] * 2
+    tr = Track(76, 4 * len(prog))
+    chords = [chord(r, q) for r, q in prog]
+    for i, ch in enumerate(chords):
+        tr.add(pad([hz(m + 12) for m in ch], 4.2, 0.35, bright=2600), i * 4)
+        tr.add(strings(hz(ch[0] - 12), 4.2, 0.35, bright=500), i * 4)
+        arp = [ch[0] + 24, ch[2] + 12, ch[1] + 24, ch[2] + 24, ch[0] + 36, ch[2] + 24, ch[1] + 24, ch[2] + 12]
+        for j, m in enumerate(arp):
+            tr.add(music_box(hz(m), 0.6, 0.22 + 0.08 * (j % 2 == 0)), i * 4 + j * 0.5)
+    scale = scale_notes("B", MINOR, midi("F#5"), midi("F#6"))
+    for pos, m, length in melody_line(rng, scale, chords[8:], 4, midi("B5"), [[3, 1], [2, 2], [4], [-1, 3]]):
+        tr.add(music_box(hz(m), length, 0.4), 32 + pos)
+    tr.render("mines", 4.0, 0.5)
+
+
+def drowned_archive():
+    """Sunken library: muffled piano and cello, slow drips. G minor, 58 bpm."""
+    rng = np.random.default_rng(61)
+    prog = [("G2", "min"), ("Eb3", "maj"), ("C3", "min"), ("D3", "sus"),
+            ("G2", "min"), ("Bb2", "maj"), ("C3", "min7"), ("D3", "7")] * 2
+    tr = Track(58, 4 * len(prog))
+    chords = [chord(r, q) for r, q in prog]
+    for i, ch in enumerate(chords):
+        tr.add(strings(hz(ch[0] - 12), 4.2, 0.5, bright=500), i * 4)
+        tr.add(pad([hz(m) for m in ch], 4.2, 0.3, bright=700), i * 4)
+        for j, m in enumerate(ch[:3]):
+            tr.add(piano(hz(m + 12), 1.8, 0.22), i * 4 + j * 1.2)
+        if rng.random() < 0.6:
+            tr.add(harp(hz(ch[2] + 36), 0.3, 0.15), i * 4 + 3.5)  # a drip
+    scale = scale_notes("G", MINOR, midi("D4"), midi("D5"))
+    for pos, m, length in melody_line(rng, scale, chords[8:], 4, midi("G4"), [[4], [2, 2], [3, 1], [-2, 2]]):
+        tr.add(strings(hz(m), length * 60 / 58, 0.4, bright=1200), 32 + pos)
+    tr.buf = lowpass(tr.buf, 3200, 2)
+    tr.render("archive", 4.2, 0.55)
+
+
+def hollowroot():
+    """The quiet below: a low drone, distant single notes, a lot of silence. E minor, 48 bpm."""
+    rng = np.random.default_rng(71)
+    beats = 48
+    tr = Track(48, beats)
+    tr.add(pad([hz(midi("E2")), hz(midi("B2"))], beats * 60 / 48 - 2, 0.6, bright=250), 0)
+    tr.add(pad([hz(midi("G3")), hz(midi("B3")), hz(midi("E4"))], 12, 0.2, bright=900), 8)
+    tr.add(pad([hz(midi("C3")), hz(midi("E3")), hz(midi("G3"))], 12, 0.2, bright=900), 28)
+    notes = scale_notes("E", MINOR, midi("E5"), midi("E6"))
+    pos = 2.0
+    while pos < beats - 4:
+        tr.add(piano(hz(int(rng.choice(notes))), 2.5, 0.35), pos)
+        pos += float(rng.choice([3, 4, 5, 6]))
+    tr.render("hollow", 5.0, 0.6)
+
+
+def final_boss():
+    """The Seraph's battle: choir, strings and drums. A minor, 108 bpm."""
+    prog = [("A2", "min"), ("F2", "maj"), ("C3", "maj"), ("G2", "maj"),
+            ("A2", "min"), ("D3", "min"), ("E2", "maj"), ("E2", "7")] * 2
+    tr = Track(108, 4 * len(prog))
+    chords = [chord(r, q) for r, q in prog]
+    for i, ch in enumerate(chords):
+        b = i * 4
+        tr.add(choir([hz(m + 12) for m in ch], 4 * 60 / 108, 0.9), b)
+        for s_ in range(8):
+            tr.add(strings(hz(ch[0] - 12), 0.22, 0.75 if s_ % 2 == 0 else 0.5, bright=1600), b + s_ * 0.5)
+        tr.add(drum("low", 1.0), b)
+        tr.add(drum("low", 0.7), b + 1.5)
+        tr.add(drum("hit", 0.8), b + 2)
+        tr.add(drum("low", 0.6), b + 3)
+        tr.add(drum("hit", 0.6), b + 3.5)
+        if i >= 8:
+            tr.add(strings(hz(ch[2] + 24), 1.9, 0.5, bright=3200), b)
+            tr.add(strings(hz(ch[1] + 24), 1.9, 0.5, bright=3200), b + 2)
+    tr.render("boss_final", 2.2, 0.3)
+
+
+# ---------------------------------------------------------------- sound effects
+
+def _write_sfx(name: str, x: np.ndarray):
+    x = x / max(1e-6, np.max(np.abs(x))) * 0.9
+    fade = min(len(x), int(SR * 0.01))
+    x[-fade:] *= np.linspace(1, 0, fade)
+    os.makedirs(SFX_OUT, exist_ok=True)
+    path = os.path.join(SFX_OUT, f"{name}.ogg")
+    with sf.SoundFile(path, "w", SR, 1, format="OGG", subtype="VORBIS") as f:
+        data = x.astype(np.float32)
+        for i in range(0, len(data), SR):
+            f.write(data[i:i + SR])
+    print(f"wrote {path}")
+
+
+def _t(seconds: float) -> np.ndarray:
+    return np.arange(int(SR * seconds)) / SR
+
+
+def _noise(seconds: float, seed: int) -> np.ndarray:
+    return np.random.default_rng(seed).normal(0, 1, int(SR * seconds))
+
+
+def _bandpass(x: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    b, a = butter(2, [lo / (SR / 2), hi / (SR / 2)], btype="band")
+    return lfilter(b, a, x)
+
+
+def _sweep(f0: float, f1: float, seconds: float) -> np.ndarray:
+    t = _t(seconds)
+    f = np.geomspace(f0, f1, len(t))
+    return np.sin(2 * np.pi * np.cumsum(f) / SR)
+
+
+def sound_effects():
+    # Nail slash: a bright swoosh of filtered noise.
+    t = _t(0.18)
+    x = _bandpass(_noise(0.18, 1), 1800, 7000) * np.exp(-((t - 0.05) ** 2) / 0.002)
+    _write_sfx("slash", x)
+    # Hit: a crisp thock with a click on top.
+    t = _t(0.2)
+    x = np.sin(2 * np.pi * 160 * t) * np.exp(-t * 30) + _bandpass(_noise(0.2, 2), 2000, 8000) * np.exp(-t * 80) * 0.6
+    _write_sfx("hit", x)
+    # Hurt: a heavy crack.
+    t = _t(0.4)
+    x = _sweep(220, 60, 0.4) * np.exp(-t * 9) + lowpass(_noise(0.4, 3), 1500) * np.exp(-t * 14) * 0.8
+    _write_sfx("hurt", np.tanh(x * 2.5))
+    # Jump / land / dash / dodge / door: soft whooshes and thumps.
+    t = _t(0.22)
+    _write_sfx("jump", _bandpass(_noise(0.22, 4), 500, 3000) * np.sin(np.pi * t / 0.22) ** 2)
+    t = _t(0.25)
+    _write_sfx("land", np.sin(2 * np.pi * 70 * t) * np.exp(-t * 22) + lowpass(_noise(0.25, 5), 600) * np.exp(-t * 30) * 0.5)
+    t = _t(0.3)
+    _write_sfx("dash", _bandpass(_noise(0.3, 6), 800, 5000) * np.exp(-((t - 0.08) ** 2) / 0.004))
+    t = _t(0.2)
+    _write_sfx("dodge", _bandpass(_noise(0.2, 7), 1200, 6000) * np.exp(-((t - 0.05) ** 2) / 0.0015))
+    t = _t(1.2)
+    _write_sfx("door", lowpass(_noise(1.2, 8), 400) * np.sin(np.pi * t / 1.2) ** 2)
+    # Geo / heal / memory / charge / ui: chimes.
+    t = _t(0.5)
+    _write_sfx("geo", (np.sin(2 * np.pi * 1760 * t) + 0.6 * np.sin(2 * np.pi * 2637 * t)) * np.exp(-t * 10))
+    t = _t(0.9)
+    x = sum(np.sin(2 * np.pi * f * t) * np.exp(-t * 3) * np.clip((t - d) * 40, 0, 1) for f, d in [(660, 0), (880, 0.08), (1320, 0.16)])
+    _write_sfx("heal", x)
+    t = _t(2.4)
+    x = sum(np.sin(2 * np.pi * hz(m) * t) * np.exp(-t * 1.4) / (1 + k) for k, m in enumerate([midi("D5"), midi("F#5"), midi("A5"), midi("D6")]))
+    _write_sfx("memory", x)
+    t = _t(0.6)
+    _write_sfx("charge", _sweep(400, 1600, 0.6) * np.clip(t / 0.5, 0, 1) * np.exp(-np.clip(t - 0.5, 0, None) * 30))
+    t = _t(0.08)
+    _write_sfx("ui", np.sin(2 * np.pi * 1200 * t) * np.exp(-t * 60))
+    # Lumen Bolt: a bright rising zap.
+    t = _t(0.45)
+    _write_sfx("bolt", _sweep(300, 2400, 0.45) * np.exp(-t * 5) + _bandpass(_noise(0.45, 9), 3000, 9000) * np.exp(-t * 12) * 0.4)
+    # Cleaving Arc: a heavy swoosh with a low boom.
+    t = _t(0.5)
+    x = _bandpass(_noise(0.5, 10), 600, 5000) * np.exp(-((t - 0.08) ** 2) / 0.006) + np.sin(2 * np.pi * 55 * t) * np.exp(-t * 7) * 0.9
+    _write_sfx("cleave", x)
+    # Lever: a metal clunk.
+    t = _t(0.35)
+    x = sum(np.sin(2 * np.pi * f * t) * np.exp(-t * d) for f, d in [(210, 14), (537, 18), (1130, 25)]) + lowpass(_noise(0.35, 11), 1200) * np.exp(-t * 40)
+    _write_sfx("lever", x)
+    # Boss roar: a growling low saw with vibrato and breath.
+    t = _t(1.6)
+    f = 70 + 18 * np.sin(2 * np.pi * 6 * t) + 25 * np.exp(-t * 2)
+    phase = 2 * np.pi * np.cumsum(f) / SR
+    saw = sum(np.sin(k * phase) / k for k in range(1, 25))
+    x = lowpass(saw, 1400) * np.sin(np.pi * np.clip(t / 1.6, 0, 1)) + lowpass(_noise(1.6, 12), 900) * 0.4 * np.sin(np.pi * t / 1.6)
+    _write_sfx("roar", np.tanh(x * 1.8))
+
+
 if __name__ == "__main__":
     ashen_burrows()
     mothlight_ruins()
@@ -362,3 +533,8 @@ if __name__ == "__main__":
     sanctum()
     boss_theme()
     ending_theme()
+    glimmerdeep()
+    drowned_archive()
+    hollowroot()
+    final_boss()
+    sound_effects()

@@ -11,6 +11,7 @@ local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Charms = require(Shared.Charms)
 local Dialogue = require(Shared.Dialogue)
+local Shop = require(Shared.Shop)
 local State = require(script.Parent.State)
 local Input = require(script.Parent.Input)
 local HUD = require(script.Parent.HUD)
@@ -93,6 +94,8 @@ local advanceSignal: BindableEvent
 local talking = false
 local talkEndedAt = 0
 
+local openWares: () -> ()
+
 local function pickLines(npcId: string): ({ string }, any)
 	local speaker = Dialogue[npcId]
 	for _, set in speaker.sets do
@@ -111,6 +114,51 @@ local function openShop()
 		shopText.Text = string.format("Reforge your nail?  %d → %d damage\nCost: ◆ %d Geo", Config.NAIL_DAMAGE[level], Config.NAIL_DAMAGE[level + 1], cost)
 	else
 		shopText.Text = "\"That edge is perfect. Nothing left to teach it.\""
+	end
+end
+
+-- ===== Lirra's wares =====
+
+local waresFrame: Frame
+local waresList: Frame
+
+openWares = function()
+	waresFrame.Visible = true
+	for _, child in waresList:GetChildren() do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	local bought = decodeSet("Bought")
+	for i, ware in Shop do
+		local sold = bought[ware.id] == true
+		local row = new("Frame", {
+			LayoutOrder = i,
+			Size = UDim2.new(1, 0, 0, 64),
+			BackgroundColor3 = Color3.fromRGB(20, 20, 30),
+			BackgroundTransparency = 0.1,
+			Parent = waresList,
+		}, {
+			new("UICorner", { CornerRadius = UDim.new(0, 6) }),
+			text({ Position = UDim2.fromOffset(14, 4), Size = UDim2.new(1, -170, 0, 28), TextXAlignment = Enum.TextXAlignment.Left, TextSize = 22, Text = ware.name }),
+			text({ Position = UDim2.fromOffset(14, 32), Size = UDim2.new(1, -170, 0, 26), TextXAlignment = Enum.TextXAlignment.Left, TextSize = 16, TextColor3 = Color3.fromRGB(180, 178, 196), Text = ware.description }),
+		})
+		button({
+			Text = if sold then "Sold" else string.format("◆ %d", ware.price),
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -12, 0.5, 0),
+			Size = UDim2.fromOffset(130, 42),
+			Parent = row,
+		}, function()
+			if not sold then
+				Net.event("BuyWare"):FireServer(ware.id)
+				task.delay(0.3, function()
+					if waresFrame.Visible then
+						openWares()
+					end
+				end)
+			end
+		end)
 	end
 end
 
@@ -148,10 +196,15 @@ local function runDialogue(npcId: string)
 		advanceSignal.Event:Wait()
 		hintLabel.Visible = false
 	end
-	if speaker.shop then
+	if speaker.shop == "nail" then
 		openShop()
 		lineLabel.Text = ""
 		advanceSignal.Event:Wait()
+	elseif speaker.shop == "wares" then
+		dialogueFrame.Visible = false
+		openWares()
+		advanceSignal.Event:Wait()
+		waresFrame.Visible = false
 	end
 	dialogueFrame.Visible = false
 	shopFrame.Visible = false
@@ -172,7 +225,19 @@ local charmList: Frame
 local notchLabel: TextLabel
 local charmsOpen = false
 
-local ORDER = { "swift_mantle", "long_reach", "soul_siphon", "ember_edge", "stone_heart", "quiet_focus" }
+local ORDER = {
+	"swift_mantle",
+	"long_reach",
+	"soul_siphon",
+	"ember_edge",
+	"stone_heart",
+	"quiet_focus",
+	"deep_pockets",
+	"glass_spur",
+	"mirror_shell",
+	"wayfarer_compass",
+	"kindled_spirit",
+}
 
 local function refreshCharms()
 	if not charmFrame then
@@ -264,10 +329,33 @@ function Menus.init()
 		advanceSignal:Fire()
 	end)
 
-	charmFrame = panel({ Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(560, 540), Parent = gui })
+	waresFrame = panel({ Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(560, 380), Parent = gui })
+	text({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 36), TextSize = 32, Text = "LIRRA'S WARES", Parent = waresFrame })
+	waresList = new("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(20, 64), Size = UDim2.new(1, -40, 1, -130), Parent = waresFrame }, {
+		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	button({ Text = "Farewell", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(200, 42), Parent = waresFrame }, function()
+		advanceSignal:Fire()
+	end)
+	player:GetAttributeChangedSignal("Geo"):Connect(function()
+		if waresFrame.Visible then
+			openWares()
+		end
+	end)
+
+	charmFrame = panel({ Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 600, 0.86, 0), Parent = gui })
 	text({ Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 36), TextSize = 34, Text = "CHARMS", Parent = charmFrame })
 	notchLabel = text({ Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 0, 24), TextSize = 20, Parent = charmFrame })
-	charmList = new("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(20, 84), Size = UDim2.new(1, -40, 1, -150), Parent = charmFrame }, {
+	charmList = new("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(20, 84),
+		Size = UDim2.new(1, -40, 1, -150),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = charmFrame,
+	}, {
 		new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
 	button({ Text = "Rise from the bench", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(240, 42), Parent = charmFrame }, function()

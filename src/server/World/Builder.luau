@@ -26,7 +26,6 @@ export type BossInfo = {
 	maxX: number,
 	floorY: number,
 	ceilY: number,
-	triggerX: number,
 	gates: { BasePart },
 }
 export type ZoneInfo = {
@@ -118,6 +117,7 @@ local function buildTiles(zoneIndex: number, chars, w: number, h: number, theme,
 				tile:SetAttribute("NoCling", true)
 				tile.Reflectance = 0.08
 			end
+			Props.midground(center, size, theme, zoneIndex * 1000 + rect[1] * 37 + rect[2], folder)
 			-- Ink outline: a slightly larger near-black slab tucked behind the tile.
 			make("Part", {
 				Name = "Outline",
@@ -165,6 +165,10 @@ local function buildTiles(zoneIndex: number, chars, w: number, h: number, theme,
 					if rng:NextNumber() < 0.35 then
 						Props.edgeTuft(theme, Grid.tileCenter(zoneIndex, cc, r) + Vector3.new(rng:NextNumber(-1.5, 1.5), T / 2, rng:NextNumber(4, 6.5)), rng, decor)
 					end
+					if rng:NextNumber() < 0.18 then
+						-- Lumpy stones along the front lip break up the tile grid.
+						Props.edgeLump(theme, Grid.tileCenter(zoneIndex, cc, r) + Vector3.new(rng:NextNumber(-1.5, 1.5), T / 2 - 0.6, DEPTH / 2), rng, decor)
+					end
 				end
 				c = c2 + 1
 			else
@@ -182,8 +186,23 @@ local function buildTiles(zoneIndex: number, chars, w: number, h: number, theme,
 	end
 end
 
-local function buildSpikes(zoneIndex: number, chars, w: number, h: number, folder: Folder)
+local function buildSpikes(zoneIndex: number, chars, w: number, h: number, theme, folder: Folder)
 	local hazards = make("Folder", { Name = "Hazards", Parent = folder })
+	for _, rect in mergeRects(chars, w, h, function(c)
+		return c == "~"
+	end) do
+		local center, size = rectToWorld(zoneIndex, rect)
+		make("Part", {
+			Name = "ThornHitbox",
+			Anchored = true,
+			CanCollide = false,
+			Transparency = 1,
+			Size = Vector3.new(size.X - 0.4, T * 0.7, DEPTH),
+			Position = center + Vector3.new(0, -T * 0.1, 0),
+			Parent = hazards,
+		})
+		Props.ink(center, size, theme, hazards)
+	end
 	for _, rect in mergeRects(chars, w, h, function(c)
 		return c == "^"
 	end) do
@@ -235,6 +254,37 @@ local function buildBreakables(zoneIndex: number, chars, w: number, h: number, t
 				Material = Enum.Material.SmoothPlastic,
 				Parent = wall,
 			})
+		end
+	end
+end
+
+local function buildSeals(zoneIndex: number, chars, w: number, h: number, folder: Folder)
+	local breakables = folder:FindFirstChild("Breakables") :: Folder
+	for _, rect in mergeRects(chars, w, h, function(c)
+		return c == "Y"
+	end) do
+		local center, size = rectToWorld(zoneIndex, rect)
+		Props.crystalSeal(center, size, breakables)
+	end
+end
+
+-- Shortcut gates ("=") and the levers / Lumen sigils that open them. Opening is per player,
+-- so the client hides gates it has unlocked (its own character is simulated locally).
+local function buildSwitches(zoneIndex: number, zoneId: string, chars, w: number, h: number, theme, folder: Folder)
+	local gates = make("Folder", { Name = "ShortcutGates", Parent = folder })
+	for _, rect in mergeRects(chars, w, h, function(c)
+		return c == "="
+	end) do
+		local center, size = rectToWorld(zoneIndex, rect)
+		Props.shortcutGate(center, size, zoneId, theme, gates)
+	end
+	local switches = make("Folder", { Name = "Switches", Parent = folder })
+	for r = 1, h do
+		for c = 1, w do
+			local ch = chars[r][c]
+			if ch == "!" or ch == "?" then
+				Props.switch(Grid.tileCenter(zoneIndex, c, r), if ch == "!" then "lever" else "sigil", zoneId, theme, switches)
+			end
 		end
 	end
 end
@@ -313,17 +363,20 @@ function Builder.build(): { ZoneInfo }
 		folder:SetAttribute("Max", Vector2.new(maxX, maxY))
 
 		buildTiles(zoneIndex, chars, w, h, theme, folder)
-		buildSpikes(zoneIndex, chars, w, h, folder)
+		buildSpikes(zoneIndex, chars, w, h, theme, folder)
 		buildBreakables(zoneIndex, chars, w, h, theme, folder)
+		buildSeals(zoneIndex, chars, w, h, folder)
+		buildSwitches(zoneIndex, zone.id, chars, w, h, theme, folder)
 		buildDoors(zoneIndex, chars, w, h, doorsFolder)
 		Props.backdrop(zoneIndex, theme, folder)
+		Props.foreground(zoneIndex, theme, folder)
+		Props.lightShafts(zoneIndex, chars, theme, folder)
 
 		local info: ZoneInfo = { index = zoneIndex, id = zone.id, folder = folder, enemies = {}, boss = nil, benches = {} }
 		local interact = make("Folder", { Name = "Interact", Parent = folder })
 		local items = make("Folder", { Name = "Items", Parent = folder })
 
 		local floorSpots = {}
-		local triggerX: number? = nil
 		local gates = {}
 		for _, rect in verticalRuns(zoneIndex, chars, w, h, "G") do
 			local center, size = rectToWorld(zoneIndex, rect)
@@ -346,9 +399,7 @@ function Builder.build(): { ZoneInfo }
 					local id = string.format("%s:%d,%d", zone.id, c, r)
 					Props.bench(id, floorPos, theme, interact)
 					info.benches[id] = CFrame.new(floorPos + Vector3.new(0, 3, 0))
-				elseif ch == "T" then
-					triggerX = pos.X
-				elseif ch == "c" or ch == "f" or ch == "s" or ch == "g" then
+				elseif string.find("cfsgmhw", ch, 1, true) then
 					table.insert(info.enemies, { kind = ch, position = pos, zone = zoneIndex })
 				elseif string.match(ch, "%a") and zone.specials[ch] then
 					local spec = zone.specials[ch]
@@ -364,6 +415,8 @@ function Builder.build(): { ZoneInfo }
 					elseif spec.kind == "geo" then
 						local p = Props.pickup(itemId, "geo", "geo", pos, Color3.fromRGB(120, 220, 255), items)
 						p:SetAttribute("Amount", spec.amount)
+					elseif spec.kind == "memory" then
+						Props.pickup(itemId, "memory", spec.id :: string, pos, Color3.fromRGB(255, 244, 214), items)
 					elseif spec.kind == "altar" then
 						Props.altar(floorPos, interact)
 					elseif spec.kind == "boss" then
@@ -377,17 +430,12 @@ function Builder.build(): { ZoneInfo }
 							maxX = ox + arena[2] * T,
 							floorY = scanVertical(zoneIndex, chars, c, r, 1),
 							ceilY = scanVertical(zoneIndex, chars, c, r, -1),
-							triggerX = 0,
 							gates = gates,
 						}
 					end
 				end
 			end
 		end
-		if info.boss then
-			info.boss.triggerX = triggerX or info.boss.minX
-		end
-
 		Props.ambience(zoneIndex, theme, floorSpots, folder)
 		infos[zoneIndex] = info
 	end

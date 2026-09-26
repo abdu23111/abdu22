@@ -1,10 +1,10 @@
 -- Client half of combat: nail swings with instant feedback (slash arcs, pogo, recoil),
--- focusing Soul to heal, and small flourishes for the dash and double jump.
+-- the charged Cleaving Arc, the Lumen Bolt, focusing Soul to heal, and small flourishes
+-- for dashing, dodging, double jumps, running and landing.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -15,14 +15,18 @@ local Input = require(script.Parent.Input)
 local Movement = require(script.Parent.Movement)
 local CameraController = require(script.Parent.CameraController)
 local Sfx = require(script.Parent.Sfx)
+local Fx = require(script.Parent.Fx)
 
 local player = Players.LocalPlayer
 
 local CombatClient = {}
 
 local lastAttack = -math.huge
+local lastBolt = -math.huge
 local focusing = false
-local fxFolder: Folder
+local chargeStart: number? = nil
+local chargeReady = false
+local chargeFx: ParticleEmitter? = nil
 
 local overlap = OverlapParams.new()
 overlap.FilterType = Enum.RaycastFilterType.Include
@@ -38,68 +42,41 @@ local function refreshTargets()
 	local world = workspace:FindFirstChild("World")
 	if world then
 		for _, zone in world:GetChildren() do
-			local b = zone:FindFirstChild("Breakables")
-			if b then
-				table.insert(list, b)
+			for _, name in { "Breakables", "Switches" } do
+				local b = zone:FindFirstChild(name)
+				if b then
+					table.insert(list, b)
+				end
 			end
 		end
 	end
 	overlap.FilterDescendantsInstances = list
 end
 
-local function fadePart(p: BasePart, duration: number, props: { [string]: any }?)
-	local goal = props or {}
-	goal.Transparency = 1
-	TweenService:Create(p, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal):Play()
-	task.delay(duration, function()
-		p:Destroy()
-	end)
-end
-
-local function fxPart(props: { [string]: any }): Part
-	local p = Instance.new("Part")
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.CastShadow = false
-	p.Material = Enum.Material.Neon
-	for k, v in props do
-		(p :: any)[k] = v
-	end
-	local size = props.Size
-	if props.Shape == Enum.PartType.Ball and size and not (size.X == size.Y and size.Y == size.Z) then
-		p.Shape = Enum.PartType.Block
-		p.Size = size
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.Sphere
-		mesh.Parent = p
-	end
-	p.Parent = fxFolder
-	return p
-end
-
 -- A crescent of short glowing segments that follows the player for a moment.
-local function slashArc(direction: string, reach: number)
+local function slashArc(direction: string, reach: number, heavy: boolean?)
 	local root = State.root
 	if not root then
 		return
 	end
 	local base = if direction == "up" then math.pi / 2 elseif direction == "down" then -math.pi / 2 elseif State.facing > 0 then 0 else math.pi
-	local radius = 3.3 * reach
+	local radius = (if heavy then 5.5 else 3.3) * reach
+	local count = if heavy then 6 else 3
+	local spread = if heavy then 15 else 19
+	local color = if heavy then Color3.fromRGB(255, 225, 255) else Color3.fromRGB(245, 245, 255)
 	local segments = {}
-	for i = -3, 3 do
-		local a = base + math.rad(i * 19)
-		local thickness = 0.55 - math.abs(i) * 0.12
-		local p = fxPart({
-			Size = Vector3.new(thickness, 1.9, 0.3),
-			Color = Color3.fromRGB(245, 245, 255),
+	for i = -count, count do
+		local a = base + math.rad(i * spread)
+		local thickness = (if heavy then 0.9 else 0.55) - math.abs(i) * (if heavy then 0.1 else 0.12)
+		local p = Fx.part({
+			Size = Vector3.new(math.max(0.15, thickness), if heavy then 2.6 else 1.9, 0.3),
+			Color = color,
 			Transparency = 0.1,
 		})
 		table.insert(segments, { part = p, angle = a })
-		fadePart(p, 0.16)
+		Fx.fade(p, if heavy then 0.26 else 0.16)
 	end
-	local center = if direction == "side" then Vector3.new(State.facing * 0.8, 0.3, 1.5) else Vector3.new(0, 0, 1.5)
+	local center = if direction == "side" or heavy then Vector3.new(State.facing * 0.8, 0.3, 1.5) else Vector3.new(0, 0, 1.5)
 	local conn
 	conn = RunService.RenderStepped:Connect(function()
 		if not root.Parent or not segments[1].part.Parent then
@@ -116,15 +93,35 @@ local function slashArc(direction: string, reach: number)
 	end)
 end
 
-local function sparks(at: Vector3)
-	for _ = 1, 6 do
-		local p = fxPart({
-			Size = Vector3.new(0.2, 1.4, 0.2),
-			Color = Color3.fromRGB(255, 255, 255),
-			CFrame = CFrame.new(at + Vector3.new(0, 0, 2)) * CFrame.Angles(0, 0, math.random() * math.pi * 2),
-		})
-		local dir = p.CFrame.UpVector
-		fadePart(p, 0.22, { CFrame = p.CFrame + dir * 2.5 })
+local function localHits(direction: string, reach: number): { BasePart }
+	local root = State.root
+	if not root then
+		return {}
+	end
+	refreshTargets()
+	local center, size = Hitbox.nail(root.Position, State.facing, direction, reach)
+	return workspace:GetPartBoundsInBox(CFrame.new(center), size, overlap), center
+end
+
+local function swing(direction: string)
+	local reach = if State.hasCharm("long_reach") then 1.35 else 1
+	Net.event("Attack"):FireServer(direction)
+	local heavy = direction == "cleave"
+	Sfx.play(if heavy then "cleave" else "slash", if heavy then 0.8 else nil)
+	slashArc(if heavy then "side" else direction, reach, heavy)
+	local hits, center = localHits(direction, reach)
+	if heavy then
+		CameraController.shake(0.7)
+	end
+	if #hits > 0 then
+		Sfx.play("hit")
+		Fx.sparks(center, if heavy then Color3.fromRGB(255, 210, 255) else nil, if heavy then 12 else 6)
+		CameraController.shake(if heavy then 0.9 else 0.25)
+		if direction == "down" then
+			Movement.pogo()
+		elseif direction == "side" then
+			Movement.recoil(-State.facing, 14, 0.07)
+		end
 	end
 end
 
@@ -145,24 +142,43 @@ local function attack()
 	elseif Input.lookDown() and not State.grounded then
 		direction = "down"
 	end
-	local reach = if State.hasCharm("long_reach") then 1.35 else 1
-	Net.event("Attack"):FireServer(direction)
-	Sfx.play("slash")
-	slashArc(direction, reach)
+	swing(direction)
 
-	refreshTargets()
-	local center, size = Hitbox.nail(root.Position, State.facing, direction, reach)
-	local hits = workspace:GetPartBoundsInBox(CFrame.new(center), size, overlap)
-	if #hits > 0 then
-		Sfx.play("hit")
-		sparks(center)
-		CameraController.shake(0.25)
-		if direction == "down" then
-			Movement.pogo()
-		elseif direction == "side" then
-			Movement.recoil(-State.facing, 14, 0.07)
-		end
+	-- Keep holding to charge the Cleaving Arc.
+	if State.hasAbility("HasCleave") then
+		chargeStart = now
+		chargeReady = false
 	end
+end
+
+local function releaseAttack()
+	local ready = chargeReady
+	chargeStart = nil
+	chargeReady = false
+	if chargeFx then
+		chargeFx.Enabled = false
+	end
+	if ready and State.root and not State.frozen() then
+		lastAttack = os.clock()
+		swing("cleave")
+	end
+end
+
+local function bolt()
+	local root = State.root
+	if not root or State.frozen() or focusing or not State.hasAbility("HasBolt") then
+		return
+	end
+	local now = os.clock()
+	if now - lastBolt < 0.4 or ((player:GetAttribute("Soul") or 0) :: number) < Config.BOLT_COST then
+		return
+	end
+	lastBolt = now
+	Net.event("Bolt"):FireServer()
+	Sfx.play("bolt", 0.9)
+	Movement.recoil(-State.facing, 18, 0.1)
+	CameraController.shake(0.35)
+	Fx.puff(root.Position + Vector3.new(State.facing * 2.5, 0.4, 0), Color3.fromRGB(220, 240, 255), 3, 0.25)
 end
 
 -- ===== Focus (heal) =====
@@ -243,7 +259,11 @@ local function focus()
 		Net.event("Heal"):FireServer()
 		Sfx.play("heal", 1.3)
 		if State.root then
-			sparks(State.root.Position)
+			Fx.sparks(State.root.Position, Color3.fromRGB(230, 235, 255), 8)
+			if State.hasCharm("kindled_spirit") then
+				CameraController.shake(0.5)
+				Fx.puff(State.root.Position, Color3.fromRGB(255, 230, 170), 10, 0.5)
+			end
 		end
 		task.wait(0.15)
 	end
@@ -257,13 +277,73 @@ local function focus()
 	focusing = false
 end
 
-function CombatClient.init()
-	fxFolder = Instance.new("Folder")
-	fxFolder.Name = "LocalFx"
-	fxFolder.Parent = workspace
+local function ghost(color: Color3)
+	local root = State.root
+	if not root then
+		return
+	end
+	local p = Fx.part({
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(2.2, 4.4, 0.4),
+		Color = color,
+		Material = Enum.Material.SmoothPlastic,
+		Transparency = 0.35,
+		Position = root.Position + Vector3.new(0, 0, -0.5),
+	})
+	Fx.fade(p, 0.25)
+end
 
+function CombatClient.init()
 	Input.on("attack", attack)
+	Input.on("attackRelease", releaseAttack)
+	Input.on("bolt", bolt)
 	Input.on("focusStart", focus)
+
+	-- Charging glow for the Cleaving Arc.
+	RunService.RenderStepped:Connect(function()
+		if not chargeStart then
+			return
+		end
+		if not Input.attackHeld or State.frozen() then
+			chargeStart = nil
+			chargeReady = false
+			if chargeFx then
+				chargeFx.Enabled = false
+			end
+			return
+		end
+		local root = State.root
+		if not root then
+			return
+		end
+		local held = os.clock() - chargeStart
+		if held > 0.2 then
+			if not chargeFx or chargeFx.Parent ~= root then
+				local e = Instance.new("ParticleEmitter")
+				e.Name = "ChargeGlow"
+				e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				e.Color = ColorSequence.new(Color3.fromRGB(255, 200, 255))
+				e.LightEmission = 1
+				e.Size = NumberSequence.new(0.4, 0)
+				e.Lifetime = NumberRange.new(0.3, 0.5)
+				e.Rate = 30
+				e.Speed = NumberRange.new(-5, -3)
+				e.Shape = Enum.ParticleEmitterShape.Sphere
+				e.ShapeInOut = Enum.ParticleEmitterShapeInOut.InAndOut
+				e.Parent = root
+				chargeFx = e
+			end
+			(chargeFx :: ParticleEmitter).Enabled = true
+		end
+		if held >= Config.CLEAVE_CHARGE and not chargeReady then
+			chargeReady = true
+			Sfx.play("charge")
+			Fx.sparks(root.Position, Color3.fromRGB(255, 210, 255), 10, 2)
+			if chargeFx then
+				chargeFx.Rate = 90
+			end
+		end
+	end)
 
 	Movement.onDash = function(dir: number)
 		local root = State.root
@@ -272,22 +352,26 @@ function CombatClient.init()
 		end
 		for i = 0, 3 do
 			task.delay(i * 0.04, function()
-				if not root.Parent then
-					return
-				end
-				local ghost = fxPart({
-					Shape = Enum.PartType.Ball,
-					Size = Vector3.new(2.2, 4.4, 0.4),
-					Color = Color3.fromRGB(30, 30, 50),
-					Material = Enum.Material.SmoothPlastic,
-					Transparency = 0.35,
-					Position = root.Position + Vector3.new(0, 0, -0.5),
-				})
-				fadePart(ghost, 0.25)
+				ghost(Color3.fromRGB(30, 30, 50))
 			end)
 		end
-		local puff = fxPart({ Shape = Enum.PartType.Ball, Size = Vector3.new(3, 3, 1), Color = Color3.fromRGB(200, 200, 220), Transparency = 0.5, Position = root.Position - Vector3.new(dir * 1.5, 0, -1) })
-		fadePart(puff, 0.3, { Size = Vector3.new(6, 5, 1) })
+		Fx.puff(root.Position - Vector3.new(dir * 1.5, 0, 0), Color3.fromRGB(200, 200, 220), 3, 0.3)
+	end
+
+	Movement.onDodge = function()
+		for i = 0, 2 do
+			task.delay(i * 0.04, function()
+				ghost(Color3.fromRGB(210, 215, 240))
+			end)
+		end
+	end
+
+	Movement.onLand = function(position: Vector3, speed: number)
+		Fx.puff(position, Color3.fromRGB(170, 165, 170), math.clamp(speed / 20, 2, 5), 0.45)
+	end
+
+	Movement.onStep = function(position: Vector3)
+		Fx.puff(position, Color3.fromRGB(150, 146, 150), 1.2, 0.35)
 	end
 
 	Movement.onDoubleJump = function()
@@ -296,14 +380,14 @@ function CombatClient.init()
 			return
 		end
 		for _, side in { -1, 1 } do
-			local wing = fxPart({
+			local wing = Fx.part({
 				Shape = Enum.PartType.Ball,
 				Size = Vector3.new(3.5, 1.6, 0.3),
 				Color = Color3.fromRGB(245, 240, 225),
 				Transparency = 0.2,
 				CFrame = CFrame.new(root.Position + Vector3.new(side * 2, 0.5, -0.6)) * CFrame.Angles(0, 0, side * 0.5),
 			})
-			fadePart(wing, 0.35, { CFrame = wing.CFrame + Vector3.new(side, -1.5, 0) })
+			Fx.fade(wing, 0.35, { CFrame = wing.CFrame + Vector3.new(side, -1.5, 0) })
 		end
 	end
 end

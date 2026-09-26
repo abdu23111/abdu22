@@ -26,6 +26,10 @@ Net.NAMES = {
 	"Heal",
 	"EquipCharm",
 	"BuyUpgrade",
+	"BuyWare",
+	"Bolt",
+	"Dodge",
+	"EnterZone",
 	-- server -> client
 	"Knockback",
 	"HazardRespawn",
@@ -36,6 +40,10 @@ Net.NAMES = {
 	"Died",
 	"Hit",
 	"CameraShake",
+	"Memory",
+	"BossIntro",
+	"BossPhase",
+	"Flash",
 }
 
 function Net.event(name: string): RemoteEvent

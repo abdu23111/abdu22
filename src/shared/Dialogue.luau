@@ -3,7 +3,7 @@
 -- attribute is true on the Player is used (a set without `when` is the fallback).
 
 export type LineSet = { when: string?, lines: { string } }
-export type Speaker = { name: string, title: string?, shop: boolean?, sets: { LineSet } }
+export type Speaker = { name: string, title: string?, shop: string?, sets: { LineSet } }
 
 local Dialogue: { [string]: Speaker } = {
 	wick = {
@@ -19,6 +19,13 @@ local Dialogue: { [string]: Speaker } = {
 				},
 			},
 			{
+				when = "EchoDefeated",
+				lines = {
+					"You went all the way down, didn't you? To where the old lanterns lie.",
+					"You look... lighter. As if you're carrying fewer ghosts. Go on. The lamp is waiting.",
+				},
+			},
+			{
 				when = "HasWings",
 				lines = {
 					"Wings of veil-silk... The Sanctum lies beyond the high ledges of the Hush.",
@@ -30,6 +37,7 @@ local Dialogue: { [string]: Speaker } = {
 				lines = {
 					"You bested the Tunneling Mother? Hah! The old burrows will sleep easier.",
 					"East, past the thorn-pit, lie the Mothlight Ruins. Our capital, before the dimming.",
+					"And that cloak could carry you to the high ledge in this very cave. The miners' tunnel starts there, down to Glimmerdeep.",
 				},
 			},
 			{
@@ -46,7 +54,7 @@ local Dialogue: { [string]: Speaker } = {
 	tock = {
 		name = "Brass Tock",
 		title = "Nailsmith of the Ruins",
-		shop = true,
+		shop = "nail",
 		sets = {
 			{
 				lines = {
@@ -137,6 +145,114 @@ local Dialogue: { [string]: Speaker } = {
 			{
 				lines = {
 					"'A LANTERN WITHOUT FLAME IS STILL A LANTERN. IT REMEMBERS WHAT IT IS FOR.'",
+				},
+			},
+		},
+	},
+	lirra = {
+		name = "Lirra",
+		title = "Wandering Merchant",
+		shop = "wares",
+		sets = {
+			{
+				lines = {
+					"Oh! A customer who isn't sleeping. How refreshing.",
+					"I trade in whatever the Hush leaves lying about. Have a look, and do mind the dust.",
+				},
+			},
+		},
+	},
+	pell = {
+		name = "Pell",
+		title = "The Lost Miner",
+		sets = {
+			{
+				when = "HasCleave",
+				lines = {
+					"You broke the Matron's shell and walked out with her swing. Hah! My old crew would've paid to see that.",
+					"Those crystal seals all over the kingdom? One good Cleaving Arc and they'll shatter like sugar.",
+				},
+			},
+			{
+				lines = {
+					"Careful, careful! Don't tread on the singing ones.",
+					"These crystals hold memories, see. The lamp spilled them and the stone drank them up.",
+					"Deeper in, the Matron guards her brood. She swings a blade of pure crystal that could split a mountain.",
+					"Learn that swing, and no seal in Vesperdeep will stop you.",
+				},
+			},
+		},
+	},
+	quill = {
+		name = "Quill",
+		title = "Drowned Scribe",
+		sets = {
+			{
+				when = "HasBolt",
+				lines = {
+					"You carry the Archivist's light now. Use it kindly.",
+					"There are sigils of old light across the kingdom. They wake only for a Lumen Bolt.",
+					"One such sigil, high above the Verdant Hush, seals a way down to where lanterns go to forget.",
+				},
+			},
+			{
+				lines = {
+					"Shh... the books are sleeping. So is Master Murrow, mostly.",
+					"The Archivist wrote down every memory the lamp ever ate. Every one.",
+					"Then the waters came, and the ink ran, and Master Murrow would not leave the pages.",
+					"If you must wake the Archivist, beware the rising ink. It remembers everything it drowns.",
+				},
+			},
+		},
+	},
+	oriel = {
+		name = "Oriel",
+		title = "The Faded Bearer",
+		sets = {
+			{
+				when = "EchoDefeated",
+				lines = {
+					"It's quiet down there now. Thank you.",
+					"Go and kindle the lamp. Tell it about us, the ones who turned back. We'd like to be remembered too.",
+				},
+			},
+			{
+				lines = {
+					"Another lantern. Another little bearer, walking down into the dark.",
+					"I came here too, long ago. I turned back at the Seraph's door. So did the others.",
+					"Everything we lost gathered at the bottom of the Hollowroot. It has a shape now. It has your shape.",
+					"If you face it... don't hate it. It is only afraid.",
+				},
+			},
+		},
+	},
+	tablet_mines = {
+		name = "Miner's Slate",
+		sets = {
+			{
+				lines = {
+					"'DO NOT STRIKE THE SINGING STONES. THEY ARE SOMEBODY'S GRANDMOTHER.'",
+				},
+			},
+		},
+	},
+	tablet_archive = {
+		name = "Waterlogged Index",
+		sets = {
+			{
+				lines = {
+					"'VOLUME 9,114: MEMORIES OF RAIN. VOLUME 9,115: MEMORIES OF RAIN (CONTINUED).'",
+					"'VOLUME 9,116: THE LAST TIME ANYONE SAW THE SURFACE.'",
+				},
+			},
+		},
+	},
+	tablet_hollow = {
+		name = "Cracked Lantern",
+		sets = {
+			{
+				lines = {
+					"Someone scratched a name into this lantern's handle, then scratched it out again.",
 				},
 			},
 		},

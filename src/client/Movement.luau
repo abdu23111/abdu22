@@ -20,6 +20,9 @@ local Movement = {}
 Movement.onTeleport = nil :: (() -> ())?
 Movement.onDash = nil :: ((number) -> ())?
 Movement.onDoubleJump = nil :: (() -> ())?
+Movement.onDodge = nil :: ((number) -> ())?
+Movement.onLand = nil :: ((Vector3, number) -> ())?
+Movement.onStep = nil :: ((Vector3) -> ())?
 
 local jumpPressedAt = -1
 local jumpCutArmed = false
@@ -29,6 +32,11 @@ local jumpedSinceGround = false
 local usedDouble = false
 local dashReady = true
 local dashRequestedAt = -1
+local dodgeRequestedAt = -1
+local dodgeUntil = 0
+local dodgeDir = -1
+local dodgeCooldownUntil = 0
+local lastStepDust = 0
 local dashUntil = 0
 local dashDir = 1
 local dashCooldownUntil = 0
@@ -155,6 +163,7 @@ local function transition(door: BasePart)
 	end
 	doorCooldownUntil = math.huge
 	State.freeze("door", true)
+	Sfx.play("door")
 	task.spawn(function()
 		Fade.out(0.3)
 		local arrival = target:GetAttribute("Arrival") :: Vector3
@@ -187,6 +196,9 @@ local function step()
 		if not wasGrounded and v.Y < -45 then
 			Sfx.play("land")
 		end
+		if not wasGrounded and v.Y < -25 and Movement.onLand then
+			Movement.onLand(root.Position - Vector3.new(0, 3, 0), -v.Y)
+		end
 		lastGroundedAt = now
 		usedDouble = false
 		dashReady = true
@@ -199,6 +211,7 @@ local function step()
 	local locked = now < lockUntil
 	local moveDir = if locked then lockDir else input
 	local dashing = now < dashUntil
+	local dodging = now < dodgeUntil
 
 	-- Wall cling
 	local wallDir = 0
@@ -215,7 +228,7 @@ local function step()
 			v = Vector3.new(v.X, -Config.WALL_SLIDE_SPEED, 0)
 		end
 		State.facing = -wallDir
-	elseif moveDir ~= 0 and not dashing then
+	elseif moveDir ~= 0 and not dashing and not dodging then
 		State.facing = moveDir
 	end
 
@@ -276,8 +289,26 @@ local function step()
 		end
 	end
 
+	-- Sidestep: a quick hop (backwards unless a direction is held) with brief invulnerability.
+	if now - dodgeRequestedAt <= 0.1 and now >= dodgeCooldownUntil and not dashing and not locked then
+		dodgeRequestedAt = -1
+		dodgeDir = if input ~= 0 then input else -State.facing
+		dodgeUntil = now + Config.DODGE_TIME
+		dodgeCooldownUntil = now + Config.DODGE_COOLDOWN
+		dodging = true
+		Net.event("Dodge"):FireServer()
+		Sfx.play("dodge", 1.25)
+		if Movement.onDodge then
+			Movement.onDodge(dodgeDir)
+		end
+	end
+
 	local baseSpeed = Config.WALK_SPEED * (if State.hasCharm("swift_mantle") then 1.15 else 1)
-	if dashing then
+	if dodging then
+		v = Vector3.new(dodgeDir * Config.DODGE_SPEED, if grounded then math.max(v.Y, 8) else v.Y * 0.4, 0)
+		humanoid.WalkSpeed = Config.DODGE_SPEED
+		humanoid:Move(Vector3.new(dodgeDir, 0, 0))
+	elseif dashing then
 		v = Vector3.new(dashDir * Config.DASH_SPEED, 0, 0)
 		humanoid.WalkSpeed = Config.DASH_SPEED
 		humanoid:Move(Vector3.new(dashDir, 0, 0))
@@ -293,6 +324,11 @@ local function step()
 	v = Vector3.new(v.X, math.max(v.Y, -Config.MAX_FALL_SPEED), 0)
 	root.AssemblyLinearVelocity = v
 	keepPlane(root)
+
+	if grounded and math.abs(v.X) > 12 and now - lastStepDust > 0.22 and Movement.onStep then
+		lastStepDust = now
+		Movement.onStep(root.Position - Vector3.new(State.facing * 0.8, 3, 0))
+	end
 
 	-- Remember the last safe footing for thorn respawns.
 	if grounded and not dashing and now - lastSafeCheck > 0.2 then
@@ -357,6 +393,9 @@ function Movement.init()
 
 	Input.on("jump", function()
 		jumpPressedAt = os.clock()
+	end)
+	Input.on("dodge", function()
+		dodgeRequestedAt = os.clock()
 	end)
 	Input.on("dash", function()
 		dashRequestedAt = os.clock()

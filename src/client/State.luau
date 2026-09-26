@@ -7,6 +7,7 @@ local State = {
 	facing = 1,
 	grounded = false,
 	zone = nil :: number?,
+	bossFight = false,
 	-- Movement is paused while any of these reasons is active (dialogue, transitions, death...).
 	freezes = {} :: { [string]: boolean },
 }

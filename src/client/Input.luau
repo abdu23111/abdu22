@@ -10,6 +10,7 @@ local Input = {
 	down = false,
 	jumpHeld = false,
 	focusHeld = false,
+	attackHeld = false,
 	stickX = 0,
 	stickY = 0,
 }
@@ -63,6 +64,9 @@ local JUMP = { [Enum.KeyCode.Space] = true, [Enum.KeyCode.Z] = true, [Enum.KeyCo
 local ATTACK = { [Enum.KeyCode.J] = true, [Enum.KeyCode.X] = true, [Enum.KeyCode.ButtonX] = true }
 local DASH = { [Enum.KeyCode.LeftShift] = true, [Enum.KeyCode.L] = true, [Enum.KeyCode.C] = true, [Enum.KeyCode.ButtonR1] = true, [Enum.KeyCode.ButtonB] = true }
 local FOCUS = { [Enum.KeyCode.F] = true, [Enum.KeyCode.K] = true, [Enum.KeyCode.ButtonL1] = true }
+local DODGE = { [Enum.KeyCode.Q] = true, [Enum.KeyCode.ButtonL2] = true }
+local BOLT = { [Enum.KeyCode.R] = true, [Enum.KeyCode.ButtonR2] = true }
+local MAP = { [Enum.KeyCode.M] = true, [Enum.KeyCode.ButtonSelect] = true }
 
 local function press(key: Enum.KeyCode, down: boolean)
 	local hold = HOLD[key]
@@ -72,8 +76,15 @@ local function press(key: Enum.KeyCode, down: boolean)
 	if JUMP[key] then
 		Input.jumpHeld = down
 		fire(if down then "jump" else "jumpRelease")
-	elseif ATTACK[key] and down then
-		fire("attack")
+	elseif ATTACK[key] then
+		Input.attackHeld = down
+		fire(if down then "attack" else "attackRelease")
+	elseif DODGE[key] and down then
+		fire("dodge")
+	elseif BOLT[key] and down then
+		fire("bolt")
+	elseif MAP[key] and down then
+		fire("map")
 	elseif DASH[key] and down then
 		fire("dash")
 	elseif FOCUS[key] then
@@ -89,6 +100,7 @@ end
 UserInputService.InputBegan:Connect(function(input, processed)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		if not processed then
+			Input.attackHeld = true
 			fire("attack")
 		end
 		return
@@ -106,7 +118,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.attackHeld then
+			Input.attackHeld = false
+			fire("attackRelease")
+		end
+		return
+	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 		Input.focusHeld = false
 		fire("focusEnd")
 		return
@@ -124,7 +142,7 @@ end)
 -- Clear held keys when the window loses focus so the character doesn't run away.
 UserInputService.WindowFocusReleased:Connect(function()
 	Input.left, Input.right, Input.up, Input.down = false, false, false, false
-	Input.jumpHeld, Input.focusHeld = false, false
+	Input.jumpHeld, Input.focusHeld, Input.attackHeld = false, false, false
 end)
 
 -- ===== Touch controls =====
@@ -192,7 +210,20 @@ if UserInputService.TouchEnabled then
 		fire("jumpRelease")
 	end)
 	touchButton(gui, "NAIL", UDim2.new(1, -180, 1, -80), 76, function()
+		Input.attackHeld = true
 		fire("attack")
+	end, function()
+		Input.attackHeld = false
+		fire("attackRelease")
+	end)
+	touchButton(gui, "BOLT", UDim2.new(1, -270, 1, -120), 58, function()
+		fire("bolt")
+	end)
+	touchButton(gui, "DODGE", UDim2.new(1, -40, 1, -190), 58, function()
+		fire("dodge")
+	end)
+	touchButton(gui, "MAP", UDim2.new(1, -60, 0, 60), 50, function()
+		fire("map")
 	end)
 	touchButton(gui, "DASH", UDim2.new(1, -110, 1, -190), 64, function()
 		fire("dash")

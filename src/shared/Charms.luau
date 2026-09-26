@@ -1,5 +1,5 @@
 --!strict
--- Charm definitions. Charms are found in the world and equipped while resting at a bench.
+-- Charm definitions. Charms are found in the world or bought, and equipped while resting at a bench.
 
 export type Charm = {
 	id: string,
@@ -51,6 +51,41 @@ local Charms: { [string]: Charm } = {
 		cost = 1,
 		description = "A cracked lens that makes the world look closer. Nail reaches further.",
 		color = Color3.fromRGB(240, 220, 140),
+	},
+	glass_spur = {
+		id = "glass_spur",
+		name = "Glass Spur",
+		cost = 2,
+		description = "A shard that hums near light. Lumen Bolts strike 50% harder and fly further.",
+		color = Color3.fromRGB(170, 240, 255),
+	},
+	mirror_shell = {
+		id = "mirror_shell",
+		name = "Mirror Shell",
+		cost = 1,
+		description = "Polished until it forgot itself. Sidestep and post-hit protection last longer.",
+		color = Color3.fromRGB(220, 220, 240),
+	},
+	wayfarer_compass = {
+		id = "wayfarer_compass",
+		name = "Wayfarer's Compass",
+		cost = 1,
+		description = "Its needle points at whoever carries it. Shows your position on the map.",
+		color = Color3.fromRGB(230, 200, 150),
+	},
+	deep_pockets = {
+		id = "deep_pockets",
+		name = "Deep Pockets",
+		cost = 1,
+		description = "A miner's pouch, lined twice. Enemies drop 50% more Geo.",
+		color = Color3.fromRGB(120, 220, 255),
+	},
+	kindled_spirit = {
+		id = "kindled_spirit",
+		name = "Kindled Spirit",
+		cost = 2,
+		description = "What is mended burns bright. Healing releases a burst of light that harms nearby foes.",
+		color = Color3.fromRGB(255, 230, 170),
 	},
 }
 

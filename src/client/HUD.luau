@@ -106,8 +106,14 @@ local function refreshSoul()
 	soulStroke.Color = if soul >= Config.HEAL_COST then Color3.fromRGB(250, 250, 255) else Color3.fromRGB(140, 140, 160)
 end
 
+local lastGeo = 0
 local function refreshGeo()
-	geoLabel.Text = "◆ " .. tostring(player:GetAttribute("Geo") or 0)
+	local geo = (player:GetAttribute("Geo") or 0) :: number
+	geoLabel.Text = "◆ " .. tostring(geo)
+	if geo > lastGeo and HUD.onGeo then
+		HUD.onGeo()
+	end
+	lastGeo = geo
 end
 
 function HUD.notify(title: string, subtitle: string?, kind: string?)
@@ -190,6 +196,9 @@ local function playEnding()
 		{ "Warmth runs through the tunnels like a remembered song.", 24 },
 		{ "In the Burrows, in the Ruins, in the Hush, small shells stir and wake.", 24 },
 		{ "And a lantern that was never lit glows softly, at last.", 24 },
+		if player:GetAttribute("EchoDefeated")
+			then { "Somewhere in the light, every bearer who turned back is remembered too.", 24 }
+			else { "Far below, in the Hollowroot, something still waits to be remembered...", 22 },
 		{ "VESPERDEEP", 64 },
 		{ "Thank you for playing.", 22 },
 	}
@@ -266,7 +275,7 @@ function HUD.init()
 	areaLine = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.43, 44), Size = UDim2.fromOffset(360, 2), BackgroundColor3 = TEXT, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = gui })
 
 	-- Controls panel
-	help = new("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 24, 1, -24), Size = UDim2.fromOffset(300, 196), BackgroundColor3 = Color3.fromRGB(10, 10, 16), BackgroundTransparency = 0.35, Parent = gui }, {
+	help = new("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 24, 1, -24), Size = UDim2.fromOffset(340, 204), BackgroundColor3 = Color3.fromRGB(10, 10, 16), BackgroundTransparency = 0.35, Parent = gui }, {
 		corner(UDim.new(0, 8)),
 		new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingTop = UDim.new(0, 10), PaddingRight = UDim.new(0, 14) }),
 	})
@@ -278,12 +287,12 @@ function HUD.init()
 		RichText = true,
 		Text = table.concat({
 			"<b>A / D</b>   move          <b>W / S</b>   aim up / down",
-			"<b>SPACE</b>   jump (hold for height)",
-			"<b>J</b> or <b>CLICK</b>   strike with the nail",
+			"<b>SPACE</b>   jump (hold for height)      <b>Q</b>   sidestep",
+			"<b>J</b> or <b>CLICK</b>   strike  ·  hold to charge (later)",
 			"<b>S + J</b> in the air   pogo off foes",
 			"<b>F</b> or <b>RIGHT-CLICK</b> (hold)   focus Soul to heal",
-			"<b>SHIFT</b>   dash (once found)",
-			"<b>E</b>   talk / rest    <b>TAB</b>   charms at a bench",
+			"<b>SHIFT</b> dash   ·   <b>R</b> Lumen Bolt   (once found)",
+			"<b>E</b>   talk / rest    <b>TAB</b>   charms    <b>M</b>   journal",
 			"<b>H</b>   hide this panel",
 		}, "\n"),
 		Parent = help,
@@ -302,6 +311,7 @@ function HUD.init()
 	player:GetAttributeChangedSignal("Geo"):Connect(refreshGeo)
 	refreshMasks()
 	refreshSoul()
+	lastGeo = (player:GetAttribute("Geo") or 0) :: number
 	refreshGeo()
 
 	task.spawn(function()
@@ -338,6 +348,7 @@ function HUD.init()
 end
 
 HUD.onEnding = nil :: (() -> ())?
+HUD.onGeo = nil :: (() -> ())?
 HUD.onVictory = nil :: (() -> ())?
 
 return HUD

@@ -1,4 +1,5 @@
--- One-shot sound effects, configured in Shared.Config.SFX.
+-- One-shot sound effects, configured in Shared.Config.SFX (your upload first, then a
+-- sound bundled with the Roblox client as a fallback).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -8,12 +9,13 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local Sfx = {}
 
 local sounds: { [string]: Sound } = {}
-for name, id in Config.SFX do
-	if id ~= "" then
+for name, ids in Config.SFX do
+	local id = if ids[1] ~= "" then ids[1] else ids[2]
+	if id and id ~= "" then
 		local sound = Instance.new("Sound")
 		sound.Name = "Sfx_" .. name
 		sound.SoundId = id
-		sound.Volume = 0.45
+		sound.Volume = Config.SFX_VOLUME
 		sound.Parent = SoundService
 		sounds[name] = sound
 	end

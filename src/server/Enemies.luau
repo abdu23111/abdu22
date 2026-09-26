@@ -1,5 +1,6 @@
 -- Regular enemies and their AI. Enemies are anchored, server-moved models; they only
--- think while a player is in their zone.
+-- think while a player is in their zone. Parts carry small procedural animations
+-- (walking legs, flapping wings, breathing bodies) and every attack has a visible wind-up.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,7 +26,7 @@ type PartSpec = {
 	color: Color3,
 	neon: boolean?,
 	transparency: number?,
-	wing: boolean?,
+	anim: string?, -- "leg" | "legB" | "wing" | "body"
 }
 
 type Kind = {
@@ -33,12 +34,13 @@ type Kind = {
 	hp: number,
 	geo: number,
 	size: Vector3,
-	flying: boolean,
+	behavior: string,
 	parts: { PartSpec },
 }
 
 local MASK = Color3.fromRGB(232, 228, 218)
 local EYE = Color3.fromRGB(10, 10, 14)
+local WARN = Color3.fromRGB(255, 170, 90)
 
 local KINDS: { [string]: Kind } = {
 	c = {
@@ -46,13 +48,29 @@ local KINDS: { [string]: Kind } = {
 		hp = 10,
 		geo = 2,
 		size = Vector3.new(3.4, 2.4, 2.6),
-		flying = false,
+		behavior = "crawler",
 		parts = {
-			{ shape = Enum.PartType.Ball, size = Vector3.new(3.4, 2.4, 2.6), offset = Vector3.new(-0.2, 0, 0), color = Color3.fromRGB(88, 78, 70) },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(1.5, 1.4, 1.6), offset = Vector3.new(1.4, -0.2, 0.2), color = MASK },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(0.35, 0.5, 0.3), offset = Vector3.new(1.9, -0.1, 0.8), color = EYE },
-			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(0.6, -1.1, 0.6), rz = 0.4, color = Color3.fromRGB(40, 36, 34) },
-			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(-0.9, -1.1, 0.6), rz = -0.4, color = Color3.fromRGB(40, 36, 34) },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(3.4, 2.4, 2.6), offset = Vector3.new(-0.2, 0, 0), color = Color3.fromRGB(88, 78, 70), anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1.5, 1.4, 1.6), offset = Vector3.new(1.4, -0.2, 0.2), color = MASK, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.35, 0.5, 0.3), offset = Vector3.new(1.9, -0.1, 0.8), color = EYE, anim = "body" },
+			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(0.6, -1.1, 0.6), rz = 0.4, color = Color3.fromRGB(40, 36, 34), anim = "leg" },
+			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(-0.9, -1.1, 0.6), rz = -0.4, color = Color3.fromRGB(40, 36, 34), anim = "legB" },
+		},
+	},
+	m = {
+		name = "Crystal Mite",
+		hp = 16,
+		geo = 4,
+		size = Vector3.new(3.4, 2.6, 2.6),
+		behavior = "crawler",
+		parts = {
+			{ shape = Enum.PartType.Ball, size = Vector3.new(3.4, 2.4, 2.6), offset = Vector3.new(-0.2, 0, 0), color = Color3.fromRGB(70, 54, 92), anim = "body" },
+			{ size = Vector3.new(0.7, 1.8, 0.7), offset = Vector3.new(-0.6, 1.3, 0), rz = 0.3, color = Color3.fromRGB(240, 150, 255), neon = true, transparency = 0.2, anim = "body" },
+			{ size = Vector3.new(0.6, 1.3, 0.6), offset = Vector3.new(0.4, 1.1, 0.4), rz = -0.4, color = Color3.fromRGB(255, 190, 255), neon = true, transparency = 0.2, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1.4, 1.3, 1.5), offset = Vector3.new(1.4, -0.2, 0.2), color = MASK, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.35, 0.5, 0.3), offset = Vector3.new(1.9, -0.1, 0.8), color = EYE, anim = "body" },
+			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(0.6, -1.1, 0.6), rz = 0.4, color = Color3.fromRGB(40, 30, 50), anim = "leg" },
+			{ size = Vector3.new(0.25, 0.9, 0.25), offset = Vector3.new(-0.9, -1.1, 0.6), rz = -0.4, color = Color3.fromRGB(40, 30, 50), anim = "legB" },
 		},
 	},
 	f = {
@@ -60,12 +78,26 @@ local KINDS: { [string]: Kind } = {
 		hp = 8,
 		geo = 3,
 		size = Vector3.new(2.4, 2.2, 2.2),
-		flying = true,
+		behavior = "flyer",
 		parts = {
 			{ shape = Enum.PartType.Ball, size = Vector3.new(2.2, 2, 2), offset = Vector3.zero, color = Color3.fromRGB(58, 44, 72) },
 			{ shape = Enum.PartType.Ball, size = Vector3.new(0.45, 0.45, 0.3), offset = Vector3.new(0.8, 0.3, 0.8), color = Color3.fromRGB(255, 150, 70), neon = true },
-			{ size = Vector3.new(2.6, 0.12, 1.4), offset = Vector3.new(-0.3, 1.1, 0), rz = 0.4, color = Color3.fromRGB(190, 190, 220), transparency = 0.5, wing = true },
+			{ size = Vector3.new(2.6, 0.12, 1.4), offset = Vector3.new(-0.3, 1.1, 0), rz = 0.4, color = Color3.fromRGB(190, 190, 220), transparency = 0.5, anim = "wing" },
 			{ size = Vector3.new(0.3, 0.8, 0.3), offset = Vector3.new(1.1, -0.2, 0), rz = -0.8, color = Color3.fromRGB(30, 24, 36) },
+		},
+	},
+	w = {
+		name = "Ink Wisp",
+		hp = 12,
+		geo = 5,
+		size = Vector3.new(2.4, 2.8, 2.2),
+		behavior = "shooter",
+		parts = {
+			{ shape = Enum.PartType.Ball, size = Vector3.new(2.2, 2.6, 2), offset = Vector3.zero, color = Color3.fromRGB(14, 20, 26), anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1.4, 1.2, 1), offset = Vector3.new(0.3, 0.6, 0.7), color = MASK, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.35, 0.45, 0.3), offset = Vector3.new(0.6, 0.6, 1.2), color = Color3.fromRGB(110, 240, 230), neon = true, anim = "body" },
+			{ size = Vector3.new(0.5, 2, 0.5), offset = Vector3.new(-0.3, -1.6, 0), rz = 0.2, color = Color3.fromRGB(14, 20, 26), anim = "leg" },
+			{ size = Vector3.new(2.4, 0.1, 1.2), offset = Vector3.new(-0.6, 1.1, -0.2), rz = 0.5, color = Color3.fromRGB(110, 240, 230), transparency = 0.6, anim = "wing" },
 		},
 	},
 	s = {
@@ -73,13 +105,13 @@ local KINDS: { [string]: Kind } = {
 		hp = 14,
 		geo = 4,
 		size = Vector3.new(3, 3.4, 3),
-		flying = false,
+		behavior = "spitter",
 		parts = {
 			{ size = Vector3.new(0.8, 1.6, 0.8), offset = Vector3.new(0, -1, 0), color = Color3.fromRGB(70, 90, 60) },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(3, 2.6, 3), offset = Vector3.new(0, 0.5, 0), color = Color3.fromRGB(96, 120, 70) },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(0.6, 0.6, 0.4), offset = Vector3.new(-0.7, 1.1, 1.2), color = Color3.fromRGB(210, 255, 150), neon = true },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(0.5, 0.5, 0.4), offset = Vector3.new(0.7, 0.4, 1.2), color = Color3.fromRGB(210, 255, 150), neon = true },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(1, 0.8, 0.5), offset = Vector3.new(0.9, 1.3, 0.9), color = EYE },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(3, 2.6, 3), offset = Vector3.new(0, 0.5, 0), color = Color3.fromRGB(96, 120, 70), anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.6, 0.6, 0.4), offset = Vector3.new(-0.7, 1.1, 1.2), color = Color3.fromRGB(210, 255, 150), neon = true, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.5, 0.5, 0.4), offset = Vector3.new(0.7, 0.4, 1.2), color = Color3.fromRGB(210, 255, 150), neon = true, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1, 0.8, 0.5), offset = Vector3.new(0.9, 1.3, 0.9), color = EYE, anim = "body" },
 		},
 	},
 	g = {
@@ -87,13 +119,29 @@ local KINDS: { [string]: Kind } = {
 		hp = 26,
 		geo = 7,
 		size = Vector3.new(3.6, 4.8, 3),
-		flying = false,
+		behavior = "charger",
 		parts = {
-			{ shape = Enum.PartType.Ball, size = Vector3.new(3.6, 4.8, 3), offset = Vector3.new(-0.2, 0, 0), color = Color3.fromRGB(70, 74, 96) },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(1.8, 1.8, 1.8), offset = Vector3.new(0.9, 1.6, 0.3), color = MASK },
-			{ shape = Enum.PartType.Ball, size = Vector3.new(0.4, 0.6, 0.3), offset = Vector3.new(1.5, 1.6, 0.9), color = EYE },
-			{ size = Vector3.new(0.5, 3.4, 2.4), offset = Vector3.new(1.8, -0.4, 0), color = Color3.fromRGB(150, 150, 170) },
-			{ size = Vector3.new(0.3, 1.6, 0.3), offset = Vector3.new(0.6, 2.8, 0), rz = -0.5, color = MASK },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(3.6, 4.8, 3), offset = Vector3.new(-0.2, 0, 0), color = Color3.fromRGB(70, 74, 96), anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1.8, 1.8, 1.8), offset = Vector3.new(0.9, 1.6, 0.3), color = MASK, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.4, 0.6, 0.3), offset = Vector3.new(1.5, 1.6, 0.9), color = EYE, anim = "body" },
+			{ size = Vector3.new(0.5, 3.4, 2.4), offset = Vector3.new(1.8, -0.4, 0), color = Color3.fromRGB(150, 150, 170), anim = "body" },
+			{ size = Vector3.new(0.3, 1.6, 0.3), offset = Vector3.new(0.6, 2.8, 0), rz = -0.5, color = MASK, anim = "body" },
+			{ size = Vector3.new(0.5, 1.4, 0.5), offset = Vector3.new(0.4, -2.4, 0.6), color = Color3.fromRGB(40, 42, 56), anim = "leg" },
+			{ size = Vector3.new(0.5, 1.4, 0.5), offset = Vector3.new(-0.8, -2.4, 0.6), color = Color3.fromRGB(40, 42, 56), anim = "legB" },
+		},
+	},
+	h = {
+		name = "Hollow Hopper",
+		hp = 18,
+		geo = 5,
+		size = Vector3.new(3, 3.4, 2.6),
+		behavior = "hopper",
+		parts = {
+			{ shape = Enum.PartType.Ball, size = Vector3.new(3, 3, 2.6), offset = Vector3.zero, color = Color3.fromRGB(30, 30, 34), anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(1.8, 1.8, 1.6), offset = Vector3.new(0.8, 0.8, 0.4), color = MASK, anim = "body" },
+			{ shape = Enum.PartType.Ball, size = Vector3.new(0.5, 0.7, 0.3), offset = Vector3.new(1.4, 0.8, 1.1), color = EYE, anim = "body" },
+			{ size = Vector3.new(0.4, 1.8, 0.4), offset = Vector3.new(-0.6, -1.6, 0.6), rz = 0.6, color = Color3.fromRGB(200, 200, 206), anim = "leg" },
+			{ size = Vector3.new(0.4, 1.8, 0.4), offset = Vector3.new(0.6, -1.6, 0.6), rz = -0.6, color = Color3.fromRGB(200, 200, 206), anim = "legB" },
 		},
 	},
 }
@@ -111,6 +159,8 @@ type Enemy = {
 	respawnAt: number,
 	state: string,
 	timer: number,
+	walk: number,
+	warning: boolean,
 	model: Model?,
 	parts: { { part: BasePart, spec: PartSpec } },
 	colors: { [BasePart]: Color3 },
@@ -123,14 +173,38 @@ rayParams.FilterType = Enum.RaycastFilterType.Include
 local PlayerService
 
 local function place(enemy: Enemy, t: number)
+	local bob = math.sin(t * 5 + enemy.home.X) * 0.1
 	for _, entry in enemy.parts do
 		local spec = entry.spec
 		local rz = (spec.rz or 0) * enemy.dir
-		if spec.wing then
-			rz += math.sin(t * 40) * 0.5
-		end
 		local o = spec.offset
-		entry.part.CFrame = CFrame.new(enemy.position + Vector3.new(o.X * enemy.dir, o.Y, o.Z)) * CFrame.Angles(0, 0, rz)
+		local dy = 0
+		if spec.anim == "wing" then
+			rz += math.sin(t * 40) * 0.5
+		elseif spec.anim == "leg" then
+			rz += math.sin(enemy.walk) * 0.45
+		elseif spec.anim == "legB" then
+			rz -= math.sin(enemy.walk) * 0.45
+		elseif spec.anim == "body" then
+			dy = bob + math.abs(math.sin(enemy.walk)) * 0.12
+		end
+		entry.part.CFrame = CFrame.new(enemy.position + Vector3.new(o.X * enemy.dir, o.Y + dy, o.Z)) * CFrame.Angles(0, 0, rz)
+	end
+	-- Wind-up tell: the shell glows hot before an attack.
+	if enemy.warning then
+		local pulse = 0.35 + 0.25 * math.sin(t * 30)
+		for p, c in enemy.colors do
+			p.Color = c:Lerp(WARN, pulse)
+		end
+	end
+end
+
+local function setWarning(enemy: Enemy, on: boolean)
+	enemy.warning = on
+	if not on then
+		for p, c in enemy.colors do
+			p.Color = c
+		end
 	end
 end
 
@@ -174,8 +248,8 @@ local function flash(enemy: Enemy)
 	end)
 end
 
-local function blocked(from: Vector3, dir: Vector3): boolean
-	return workspace:Raycast(from, dir, rayParams) ~= nil
+local function blocked(from: Vector3, dir: Vector3): RaycastResult?
+	return workspace:Raycast(from, dir, rayParams)
 end
 
 local function spawnEnemy(enemy: Enemy)
@@ -207,6 +281,8 @@ local function spawnEnemy(enemy: Enemy)
 	enemy.alive = true
 	enemy.state = "patrol"
 	enemy.timer = 0
+	enemy.walk = 0
+	enemy.warning = false
 	enemy.velocity = Vector3.zero
 	enemy.position = enemy.home
 	place(enemy, os.clock())
@@ -219,12 +295,13 @@ local function spawnEnemy(enemy: Enemy)
 			end
 			enemy.hp -= damage
 			flash(enemy)
+			local flying = def.behavior == "flyer" or def.behavior == "shooter"
 			-- Recoil away from the strike.
-			local push = Vector3.new(direction.X, if def.flying then direction.Y else 0, 0) * 2
+			local push = Vector3.new(direction.X, if flying then direction.Y else 0, 0) * 2
 			if not blocked(enemy.position, push * 1.5) then
 				enemy.position += push
 			end
-			if def.flying then
+			if flying then
 				enemy.velocity = Vector3.new(direction.X, direction.Y, 0) * 18
 			end
 			if enemy.hp <= 0 then
@@ -232,7 +309,7 @@ local function spawnEnemy(enemy: Enemy)
 				enemy.respawnAt = os.clock() + Config.ENEMY_RESPAWN_TIME
 				burst(enemy.position, Color3.fromRGB(255, 255, 255), 16)
 				burst(enemy.position, Color3.fromRGB(120, 220, 255), def.geo * 3)
-				PlayerService.addGeo(player, def.geo)
+				PlayerService.enemyGeo(player, def.geo)
 				model:Destroy()
 				enemy.model = nil
 			end
@@ -265,16 +342,31 @@ local function walk(enemy: Enemy, speed: number, dt: number): boolean
 		return false
 	end
 	enemy.position += dir * speed * dt
+	enemy.walk += speed * dt * 1.4
 	return true
+end
+
+-- Fly toward a target point while sliding along walls.
+local function fly(enemy: Enemy, desired: Vector3, dt: number)
+	enemy.velocity = enemy.velocity:Lerp(Vector3.new(desired.X, desired.Y, 0), math.min(1, dt * 2.5))
+	local step = enemy.velocity * dt
+	local r = enemy.def.size.X / 2
+	if step.X ~= 0 and not blocked(enemy.position, Vector3.new(step.X + math.sign(step.X) * r, 0, 0)) then
+		enemy.position += Vector3.new(step.X, 0, 0)
+	end
+	if step.Y ~= 0 and not blocked(enemy.position, Vector3.new(0, step.Y + math.sign(step.Y) * r, 0)) then
+		enemy.position += Vector3.new(0, step.Y, 0)
+	end
 end
 
 local function update(enemy: Enemy, dt: number, now: number)
 	local def = enemy.def
-	if enemy.kind == "c" then
-		if not walk(enemy, 6, dt) then
+	local behavior = def.behavior
+	if behavior == "crawler" then
+		if not walk(enemy, if enemy.kind == "m" then 8 else 6, dt) then
 			enemy.dir = -enemy.dir
 		end
-	elseif enemy.kind == "f" then
+	elseif behavior == "flyer" then
 		local _, root = nearestPlayer(enemy.position, enemy.zone, 38)
 		local desired
 		if root then
@@ -283,24 +375,51 @@ local function update(enemy: Enemy, dt: number, now: number)
 			local target = enemy.home + Vector3.new(math.sin(now * 0.7 + enemy.home.X) * 4, math.sin(now * 1.3) * 2, 0)
 			desired = (target - enemy.position) * 1.5
 		end
-		enemy.velocity = enemy.velocity:Lerp(Vector3.new(desired.X, desired.Y, 0), math.min(1, dt * 2.5))
-		local step = enemy.velocity * dt
-		local r = def.size.X / 2
-		if step.X ~= 0 and not blocked(enemy.position, Vector3.new(step.X + math.sign(step.X) * r, 0, 0)) then
-			enemy.position += Vector3.new(step.X, 0, 0)
-		end
-		if step.Y ~= 0 and not blocked(enemy.position, Vector3.new(0, step.Y + math.sign(step.Y) * r, 0)) then
-			enemy.position += Vector3.new(0, step.Y, 0)
-		end
+		fly(enemy, desired, dt)
 		if math.abs(enemy.velocity.X) > 0.5 then
 			enemy.dir = if enemy.velocity.X > 0 then 1 else -1
 		end
-	elseif enemy.kind == "s" then
+	elseif behavior == "shooter" then
+		-- Keeps its distance, then spits a glob of ink after a visible wind-up.
+		local _, root = nearestPlayer(enemy.position, enemy.zone, 42)
+		local desired = (enemy.home + Vector3.new(0, math.sin(now * 1.1) * 2, 0) - enemy.position) * 1.2
+		if root then
+			local away = enemy.position - root.Position
+			local dist = away.Magnitude
+			local ideal = root.Position + away.Unit * 16 + Vector3.new(0, 4, 0)
+			desired = (ideal - enemy.position) * (if dist < 12 then 2.5 else 1.2)
+			enemy.dir = if root.Position.X > enemy.position.X then 1 else -1
+			enemy.timer -= dt
+			if enemy.timer <= 0.5 and not enemy.warning then
+				setWarning(enemy, true)
+			end
+			if enemy.timer <= 0 then
+				setWarning(enemy, false)
+				enemy.timer = 2.4
+				local aim = root.Position - enemy.position
+				Projectiles.spawn({
+					position = enemy.position,
+					velocity = Vector3.new(aim.X, aim.Y, 0).Unit * 30,
+					color = Color3.fromRGB(20, 40, 44),
+					radius = 0.8,
+					lifetime = 3,
+				})
+			end
+		else
+			enemy.timer = 1.2
+			setWarning(enemy, false)
+		end
+		fly(enemy, desired, dt)
+	elseif behavior == "spitter" then
 		local _, root = nearestPlayer(enemy.position, enemy.zone, 44)
 		if root then
 			enemy.dir = if root.Position.X > enemy.position.X then 1 else -1
 			enemy.timer -= dt
+			if enemy.timer <= 0.45 and not enemy.warning then
+				setWarning(enemy, true)
+			end
 			if enemy.timer <= 0 then
+				setWarning(enemy, false)
 				enemy.timer = 2.6
 				local from = enemy.position + Vector3.new(0, 1.2, 0)
 				local aim = (root.Position - from)
@@ -314,8 +433,9 @@ local function update(enemy: Enemy, dt: number, now: number)
 			end
 		else
 			enemy.timer = 1
+			setWarning(enemy, false)
 		end
-	elseif enemy.kind == "g" then
+	elseif behavior == "charger" then
 		if enemy.state == "patrol" then
 			if not walk(enemy, 5, dt) then
 				enemy.dir = -enemy.dir
@@ -324,12 +444,14 @@ local function update(enemy: Enemy, dt: number, now: number)
 			if root and math.abs(root.Position.Y - enemy.position.Y) < 6 then
 				enemy.dir = if root.Position.X > enemy.position.X then 1 else -1
 				enemy.state = "windup"
-				enemy.timer = 0.55
+				enemy.timer = 0.6
+				setWarning(enemy, true)
 			end
 		elseif enemy.state == "windup" then
 			enemy.timer -= dt
 			enemy.position += Vector3.new(math.sin(now * 80) * 0.05, 0, 0)
 			if enemy.timer <= 0 then
+				setWarning(enemy, false)
 				enemy.state = "charge"
 				enemy.timer = 1.3
 			end
@@ -345,6 +467,51 @@ local function update(enemy: Enemy, dt: number, now: number)
 				enemy.state = "patrol"
 			end
 		end
+	elseif behavior == "hopper" then
+		local half = def.size.Y / 2
+		if enemy.state == "air" then
+			enemy.velocity += Vector3.new(0, -120 * dt, 0)
+			local step = enemy.velocity * dt
+			if blocked(enemy.position, Vector3.new(step.X + math.sign(step.X) * def.size.X / 2, 0, 0)) then
+				enemy.velocity = Vector3.new(0, enemy.velocity.Y, 0)
+				step = Vector3.new(0, step.Y, 0)
+			end
+			if step.Y < 0 then
+				local hit = blocked(enemy.position, Vector3.new(0, step.Y - half, 0))
+				if hit then
+					enemy.position = Vector3.new(enemy.position.X + step.X, hit.Position.Y + half, 0)
+					enemy.velocity = Vector3.zero
+					enemy.state = "patrol"
+					enemy.timer = 0.7
+					return
+				end
+			elseif blocked(enemy.position, Vector3.new(0, step.Y + half, 0)) then
+				enemy.velocity = Vector3.new(enemy.velocity.X, 0, 0)
+				step = Vector3.new(step.X, 0, 0)
+			end
+			enemy.position += step
+			enemy.walk += dt * 20
+		else
+			enemy.timer -= dt
+			local _, root = nearestPlayer(enemy.position, enemy.zone, 30)
+			if root then
+				enemy.dir = if root.Position.X > enemy.position.X then 1 else -1
+			end
+			if enemy.timer <= 0.35 and root and not enemy.warning then
+				setWarning(enemy, true)
+			end
+			if enemy.timer <= 0 then
+				setWarning(enemy, false)
+				local reach = if root then math.clamp((root.Position.X - enemy.position.X) * 1.1, -26, 26) else enemy.dir * 8
+				enemy.velocity = Vector3.new(reach, 42, 0)
+				enemy.state = "air"
+				-- Wander back toward home when nobody is around.
+				if not root and math.abs(enemy.position.X - enemy.home.X) > 12 then
+					enemy.velocity = Vector3.new(math.sign(enemy.home.X - enemy.position.X) * 8, 42, 0)
+				end
+				enemy.timer = 1.2
+			end
+		end
 	end
 end
 
@@ -358,7 +525,7 @@ function Enemies.init(infos, playerService)
 		for _, spawn in info.enemies do
 			local def = KINDS[spawn.kind]
 			local home = spawn.position
-			if not def.flying then
+			if def.behavior ~= "flyer" and def.behavior ~= "shooter" then
 				-- Rest on the floor of the tile the enemy was drawn in.
 				home = Vector3.new(home.X, home.Y - T / 2 + def.size.Y / 2, 0)
 			end
@@ -375,6 +542,8 @@ function Enemies.init(infos, playerService)
 				respawnAt = 0,
 				state = "patrol",
 				timer = 0,
+				walk = 0,
+				warning = false,
 				model = nil,
 				parts = {},
 				colors = {},

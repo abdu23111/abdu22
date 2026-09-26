@@ -13,6 +13,8 @@ local Charms = require(Shared.Charms)
 local Abilities = require(Shared.Abilities)
 local Dialogue = require(Shared.Dialogue)
 local Grid = require(Shared.Grid)
+local Zones = require(Shared.Zones)
+local Shop = require(Shared.Shop)
 local Damageable = require(script.Parent.Damageable)
 local Props = require(script.Parent.World.Props)
 
@@ -20,6 +22,7 @@ local make = Props.make
 
 local PlayerService = {}
 PlayerService.onRest = nil :: (() -> ())?
+PlayerService.onHealBurst = nil :: ((Player) -> ())?
 
 type Data = {
 	geo: number,
@@ -33,6 +36,11 @@ type Data = {
 	bench: string?,
 	echo: { x: number, y: number, geo: number }?,
 	finished: boolean,
+	memories: { [string]: boolean },
+	switches: { [string]: boolean },
+	visited: { [string]: boolean },
+	bought: { [string]: boolean },
+	extraNotches: number,
 }
 
 local store: DataStore? = nil
@@ -49,6 +57,8 @@ local dataByPlayer: { [Player]: Data } = {}
 local lastHurt: { [Player]: number } = {}
 local lastHeal: { [Player]: number } = {}
 local lastHazard: { [Player]: number } = {}
+local dodgeUntil: { [Player]: number } = {}
+local lastDodge: { [Player]: number } = {}
 local dead: { [Player]: boolean } = {}
 local benchCFrames: { [string]: CFrame } = {}
 local echoFolder: Folder
@@ -66,6 +76,11 @@ local function newData(): Data
 		bench = nil,
 		echo = nil,
 		finished = false,
+		memories = {},
+		switches = {},
+		visited = {},
+		bought = {},
+		extraNotches = 0,
 	}
 end
 
@@ -94,7 +109,7 @@ function PlayerService.notches(player: Player): number
 			defeated += 1
 		end
 	end
-	return Config.BASE_NOTCHES + defeated
+	return Config.BASE_NOTCHES + defeated + (if data then data.extraNotches else 0)
 end
 
 local function setOf(t: { [string]: boolean }): string
@@ -124,6 +139,11 @@ function PlayerService.sync(player: Player)
 	player:SetAttribute("CharmsEquipped", setOf(data.charmsEquipped))
 	player:SetAttribute("Collected", setOf(data.collected))
 	player:SetAttribute("Bosses", setOf(data.bosses))
+	player:SetAttribute("EchoDefeated", data.bosses.echo == true)
+	player:SetAttribute("Memories", setOf(data.memories))
+	player:SetAttribute("Switches", setOf(data.switches))
+	player:SetAttribute("Visited", setOf(data.visited))
+	player:SetAttribute("Bought", setOf(data.bought))
 	local masks = player:GetAttribute("Masks")
 	if typeof(masks) == "number" then
 		player:SetAttribute("Masks", math.min(masks, PlayerService.maxMasks(player)))
@@ -158,6 +178,26 @@ function PlayerService.addGeo(player: Player, amount: number)
 		data.geo += amount
 		player:SetAttribute("Geo", data.geo)
 	end
+end
+
+-- Geo from slain enemies, boosted by Deep Pockets.
+function PlayerService.enemyGeo(player: Player, amount: number)
+	if PlayerService.hasCharm(player, "deep_pockets") then
+		amount = math.ceil(amount * 1.5)
+	end
+	PlayerService.addGeo(player, amount)
+end
+
+-- A lever or Lumen sigil was struck: open that zone's shortcut gates for this player.
+function PlayerService.openSwitch(player: Player, zoneId: string)
+	local data = dataByPlayer[player]
+	if not data or data.switches[zoneId] then
+		return
+	end
+	data.switches[zoneId] = true
+	PlayerService.sync(player)
+	notify(player, "Somewhere, a gate grinds open.", nil, "secret")
+	PlayerService.save(player)
 end
 
 function PlayerService.addSoul(player: Player, base: number)
@@ -318,7 +358,11 @@ function PlayerService.damage(player: Player, amount: number, sourcePosition: Ve
 		return
 	end
 	local now = os.clock()
-	if not hazard and lastHurt[player] and now - lastHurt[player] < Config.INVULN_TIME then
+	local invuln = Config.INVULN_TIME + (if PlayerService.hasCharm(player, "mirror_shell") then 0.5 else 0)
+	if not hazard and lastHurt[player] and now - lastHurt[player] < invuln then
+		return
+	end
+	if not hazard and dodgeUntil[player] and now < dodgeUntil[player] then
 		return
 	end
 	local root = rootOf(player)
@@ -430,6 +474,7 @@ end
 
 local benchSeats: { BasePart } = {}
 local tockParts: { BasePart } = {}
+local lirraParts: { BasePart } = {}
 
 local function rest(player: Player, benchId: string)
 	local data = dataByPlayer[player]
@@ -466,6 +511,11 @@ local function collect(player: Player, pickup: BasePart)
 		PlayerService.sync(player)
 		player:SetAttribute("Masks", PlayerService.maxMasks(player))
 		notify(player, "Heart Husk", "Your shell hardens. +1 mask.", "charm")
+	elseif kind == "memory" then
+		data.memories[id] = true
+		-- The vignette pauses the player; keep them safe while they read.
+		dodgeUntil[player] = os.clock() + 8
+		Net.event("Memory"):FireClient(player, id)
 	elseif kind == "geo" then
 		data.geo += (pickup:GetAttribute("Amount") or 50) :: number
 		notify(player, "Geo Cache", string.format("+%d Geo", (pickup:GetAttribute("Amount") or 50) :: number), "info")
@@ -547,6 +597,8 @@ function PlayerService.init(infos)
 				local npcId = model:GetAttribute("NpcId") :: string
 				if npcId == "tock" then
 					table.insert(tockParts, inst.Parent :: BasePart)
+				elseif npcId == "lirra" then
+					table.insert(lirraParts, inst.Parent :: BasePart)
 				end
 				inst.Triggered:Connect(function(player)
 					if Dialogue[npcId] then
@@ -610,6 +662,68 @@ function PlayerService.init(infos)
 		lastHeal[player] = now
 		player:SetAttribute("Soul", soul - Config.HEAL_COST)
 		player:SetAttribute("Masks", masks + 1)
+		if data.charmsEquipped.kindled_spirit and PlayerService.onHealBurst then
+			PlayerService.onHealBurst(player)
+		end
+	end)
+
+	Net.event("Dodge").OnServerEvent:Connect(function(player)
+		local now = os.clock()
+		if dead[player] or (lastDodge[player] and now - lastDodge[player] < Config.DODGE_COOLDOWN * 0.8) then
+			return
+		end
+		lastDodge[player] = now
+		local extra = if PlayerService.hasCharm(player, "mirror_shell") then 1.6 else 1
+		-- A little latency allowance on top of the sidestep itself.
+		dodgeUntil[player] = now + Config.DODGE_INVULN * extra + 0.08
+	end)
+
+	Net.event("EnterZone").OnServerEvent:Connect(function(player, index: unknown)
+		local data = dataByPlayer[player]
+		if not data or typeof(index) ~= "number" or PlayerService.zoneOf(player) ~= index then
+			return
+		end
+		local zone = Zones[index]
+		if zone and not data.visited[zone.id] then
+			data.visited[zone.id] = true
+			PlayerService.sync(player)
+			PlayerService.save(player)
+		end
+	end)
+
+	Net.event("BuyWare").OnServerEvent:Connect(function(player, wareId: unknown)
+		local data = dataByPlayer[player]
+		if not data or typeof(wareId) ~= "string" or not nearAny(player, lirraParts, 16) then
+			return
+		end
+		local ware
+		for _, w in Shop do
+			if w.id == wareId then
+				ware = w
+			end
+		end
+		if not ware or data.bought[ware.id] then
+			return
+		end
+		if data.geo < ware.price then
+			notify(player, "Not enough Geo", string.format("Lirra wants %d Geo for that.", ware.price), "info")
+			return
+		end
+		data.geo -= ware.price
+		data.bought[ware.id] = true
+		if ware.kind == "charm" then
+			data.charmsOwned[ware.charm :: string] = true
+		elseif ware.kind == "heart" then
+			data.hearts += 1
+		elseif ware.kind == "notch" then
+			data.extraNotches += 1
+		end
+		PlayerService.sync(player)
+		if ware.kind == "heart" then
+			player:SetAttribute("Masks", PlayerService.maxMasks(player))
+		end
+		notify(player, ware.name, ware.description, "charm")
+		PlayerService.save(player)
 	end)
 
 	local function onPlayer(player: Player)
@@ -656,6 +770,8 @@ function PlayerService.init(infos)
 			lastHeal[player] = nil
 			lastHazard[player] = nil
 			dead[player] = nil
+			dodgeUntil[player] = nil
+			lastDodge[player] = nil
 		end)
 	end)
 	game:BindToClose(function()

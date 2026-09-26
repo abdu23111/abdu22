@@ -1,10 +1,10 @@
 # Vesperdeep
 
-*A dark, atmospheric 2D action-adventure for Roblox, set in a buried kingdom of moths and beetles.*
+*A dark, atmospheric action-adventure metroidvania for Roblox, set in a buried kingdom of moths and beetles.*
 
-The Great Lamp that once lit every tunnel of Vesperdeep has gone cold, and its people have fallen into the **Hush**, a sleep that hollows the shell. You are a small, masked wanderer carrying an unlit lantern. Descend through four connected regions, earn the abilities that open new paths, gather charms, uncover secrets, and face the guardians standing between you and the lamp.
+The Great Lamp that once lit every tunnel of Vesperdeep has gone cold, and its people have fallen into the **Hush**, a sleep that hollows the shell. You are a small, masked wanderer carrying an unlit lantern. Explore seven interconnected regions, earn the abilities that open new paths, recover lost memories, and face the guardians standing between you and the lamp. Along the way you'll learn what the lamp really burned, and why its keeper let it go dark.
 
-All characters, names, maps, dialogue, art and music in this project are original.
+All characters, names, maps, dialogue, story, art and music in this project are original.
 
 ---
 
@@ -13,37 +13,42 @@ All characters, names, maps, dialogue, art and music in this project are origina
 **Option A: just open it**
 1. Download `Vesperdeep.rbxl` from this repo.
 2. Double-click it (or open it from Roblox Studio with **File → Open from File**).
-3. Press **Play** (F5).
+3. Press **Play** (F5). The world builds itself when the game starts.
 
 **Option B: live-sync the code with Rojo** (recommended if you'll edit it)
 1. Install [Rojo](https://rojo.space) 7.4+ (e.g. `aftman install` with the included `aftman.toml`), plus the Rojo Studio plugin.
 2. In this folder run `rojo serve`.
 3. In Studio open a new Baseplate, then click **Connect** in the Rojo plugin.
-4. Delete the default `Baseplate` and `SpawnLocation` (the game builds its own world), then press **Play**.
+4. Delete the default `Baseplate` and `SpawnLocation`, then press **Play**.
 
 To rebuild the place file yourself: `rojo build -o Vesperdeep.rbxl`.
 
 > **Saving:** progress uses DataStores. To test saving in Studio, publish the place and turn on
 > *Game Settings → Security → Enable Studio Access to API Services*. Without it the game still runs; it just won't remember you.
 
-### Add the music (one-time)
+### Add the music and sound effects (one-time)
 
-Roblox needs audio uploaded to your account before a game can play it. The soundtrack is included as `.ogg` files:
+Roblox only plays audio that has been uploaded to your account. The game ships with basic built-in sounds, but the real soundtrack and effects are in this repo:
 
-1. In Studio open **Window → Asset Manager → Bulk Import** (or use the Creator Hub) and upload everything in `assets/music/`.
+1. In Studio open **Window → Asset Manager → Bulk Import** (or use the Creator Hub) and upload the files in `assets/music/` and `assets/sfx/`.
 2. Right-click each uploaded sound → **Copy Asset ID**.
-3. Paste the ids into `src/shared/Config.luau` under `Config.MUSIC`, for example `burrows = "rbxassetid://1234567890"`.
+3. Paste the ids into `src/shared/Config.luau`:
+   - music goes in `Config.MUSIC`, e.g. `burrows = "rbxassetid://1234567890"`
+   - effects go in the first slot of each `Config.SFX` entry, e.g. `slash = { "rbxassetid://…", "rbxasset://sounds/swordslash.wav" }`
 
-| File | Plays in |
+| Music | Plays in |
 |---|---|
-| `burrows.ogg` | Ashen Burrows: lonely piano over a low drone |
-| `ruins.ogg` | Mothlight Ruins: a faded music-box waltz with cello |
-| `forest.ogg` | Verdant Hush: harp arpeggios and breathy voices |
-| `temple.ogg` | Sanctum of Still Wings: distant choir and bells |
-| `boss.ogg` | every boss fight: driving strings and drums |
-| `ending.ogg` | the finale |
+| `burrows` | Ashen Burrows: lonely piano over a low drone |
+| `ruins` | Mothlight Ruins: a faded music-box waltz with cello |
+| `forest` | Verdant Hush: harp arpeggios and breathy voices |
+| `mines` | Glimmerdeep Mines: glassy crystal arpeggios |
+| `archive` | Drowned Archive: muffled piano, cello and drips |
+| `hollow` | The Hollowroot: a drone and distant notes in the dark |
+| `temple` | Sanctum of Still Wings: distant choir and bells |
+| `boss` / `boss_final` | guardian fights / the Seraph |
+| `ending` | the finale |
 
-The music is composed and synthesised from scratch by `tools/compose.py`. Tweak it and re-run `python tools/compose.py` (needs `numpy scipy soundfile`) to make your own variations.
+Everything is composed and synthesised from scratch by `tools/compose.py` (needs `numpy scipy soundfile`). Tweak it and re-run to make your own versions.
 
 ---
 
@@ -52,14 +57,18 @@ The music is composed and synthesised from scratch by `tools/compose.py`. Tweak 
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
 | Move | A / D (or arrows) | Left stick / D-pad |
-| Aim up / down | W / S | Stick up / down |
+| Aim up / down, look around (hold while still) | W / S | Stick up / down |
 | Jump (hold for height) | Space | A |
 | Nail strike | J or left click | X |
+| Cleaving Arc *(found later)* | Hold the strike button, release | Hold X |
 | Pogo off enemies | Hold S + strike in mid-air | Down + X |
+| Sidestep (brief invulnerability) | Q | LT |
+| Dash *(found later)* | Shift | RB / B |
+| Lumen Bolt *(found later)* | R | RT |
 | Focus Soul to heal | Hold F or right click | LB |
-| Dash *(after it's found)* | Shift | RB / B |
 | Talk / rest at bench | E | Y |
 | Charms (at a bench) | Tab | |
+| Journal: map, abilities, memories | M | View / Back |
 | Show / hide controls | H | |
 
 Phones and tablets get on-screen buttons.
@@ -68,25 +77,50 @@ Phones and tablets get on-screen buttons.
 
 ## The world
 
+Seven regions, linked in a loop so later abilities open shortcuts back through earlier ground.
+
 | Region | Mood | Guardian | Reward |
 |---|---|---|---|
-| **Ashen Burrows** | Ember-lit caves where the kingdom began | **Gravelmaw, the Tunneling Mother** charges, leaps and bursts from the ground | **Drift Cloak** (dash) |
-| **Mothlight Ruins** | The fallen capital, pale lamps in silent windows | **Sir Vantis, the Hollow Sentinel** lunges, slams and makes triple thrusts | **Thorn Claws** (wall cling and wall jump) |
-| **Verdant Hush** | A glowing fungal garden that listens | **The Thornwidow, Weaver of Wings** shoots web volleys and drops from the ceiling | **Veil Wings** (double jump) |
-| **Sanctum of Still Wings** | Gilded temple halls around the Great Lamp | **Asterion, the Moth Seraph** fires radiant bursts, dives and rains feathers, and gets faster in a second phase | The ending |
+| **Ashen Burrows** | Ember-lit caves where the kingdom began | **Gravelmaw, the Tunneling Mother** | **Drift Cloak** (dash) |
+| **Glimmerdeep Mines** | Violet crystal caverns that hum with spilled memories | **Quartzelle, the Facet Matron** | **Cleaving Arc** (charged slash that breaks crystal seals) |
+| **Mothlight Ruins** | The fallen capital, pale lamps in silent windows | **Sir Vantis, the Hollow Sentinel** | **Thorn Claws** (wall cling and wall jump) |
+| **Drowned Archive** | A flooded library of every forgotten word | **Murrow, Archivist of Drowned Words** | **Lumen Bolt** (soul spell that wakes sigils) |
+| **Verdant Hush** | A glowing fungal garden that listens | **The Thornwidow, Weaver of Wings** | **Veil Wings** (double jump) |
+| **The Hollowroot** *(secret)* | A monochrome abyss of abandoned lanterns | **The Hollow Echo, All Who Turned Back** | The true ending |
+| **Sanctum of Still Wings** | Gilded temple halls around the Great Lamp | **Asterion, the Moth Seraph** | The ending |
 
-Each ability opens the way onward: a thorn pit too wide to jump, a sheer shaft, a cliff of smooth unclimbable stone. Earlier areas hide things you can only reach later.
+**How abilities open the map:**
+- **Dash** crosses wide thorn pits and reaches the high ledge down to the Mines.
+- **Claws** climb the Ruins shaft and the well between the Mines and the Archive.
+- **Cleaving Arc** shatters crystal seals hiding Heart Husks and charms.
+- **Lumen Bolt** wakes the sigil that seals the way into the Hollowroot.
+- **Wings** reach the high Sanctum door and many secrets.
 
-**Characters:** Old Wick, keeper of the first bench · Brass Tock, the nailsmith (spend Geo to reforge your nail) · Ilo, the moss pilgrim · Sael, the last acolyte · plus weathered tablets that tell the kingdom's story.
+**Guardians:** every boss has its own arena, attack patterns and personality, with 2 or 3 **phases** that each open with a stagger and roar. Every attack is telegraphed: the boss glows hot and trembles before striking, and anything about to land (falling stone, crystal spires, ink, feathers) is **marked on the floor** first. Each fight opens with a **cinematic introduction** (gates slam, letterbox, camera pan, title card), and a bench waits just outside every arena.
 
-**Enemies:** Husk Mites (crawlers), Gloom Gnats (flyers that chase you), Spore Bulbs (lob spores), Shellguards (wind up and charge).
+**Characters:** Old Wick, keeper of the first bench · Brass Tock, the nailsmith · Lirra, wandering merchant · Pell, the lost miner · Quill, the drowned scribe · Ilo, the moss pilgrim · Oriel, the faded bearer · Sael, the last acolyte.
+
+**Enemies:** Husk Mites, Crystal Mites, Gloom Gnats, Ink Wisps (keep their distance and spit ink), Spore Bulbs, Shellguards (wind up and charge), Hollow Hoppers (leap at you). Every enemy attack has a visible wind-up.
 
 **Systems:**
-- **Masks and Soul:** striking enemies fills your Soul orb. Hold Focus to spend 33 Soul and restore a mask.
-- **Benches:** checkpoints. Resting restores your masks, sets your respawn point and opens the charm menu.
-- **Death:** you drop your Geo and leave an **Echo** behind. Find it and strike it to take your Geo back.
-- **Charms (6):** Swift Mantle, Long Reach, Soul Siphon, Ember Edge, Stone Heart and Quiet Focus. Each costs notches, and every guardian you defeat grants another notch.
-- **Secrets:** cracked walls hide charms, Heart Husks (+1 max mask) and lore. Hit suspicious walls.
+- **Masks and Soul:** striking enemies fills your Soul orb. Spend it to heal (hold Focus) or to cast the Lumen Bolt.
+- **Benches:** checkpoints. Resting restores masks, sets your respawn and opens the charm menu.
+- **Death:** you drop your Geo as an **Echo**; strike it to take the Geo back.
+- **Charms (11):** Swift Mantle, Long Reach, Soul Siphon, Ember Edge, Stone Heart, Quiet Focus, Deep Pockets, Glass Spur, Mirror Shell, Wayfarer's Compass and Kindled Spirit. Each costs notches; guardians and Lirra grant more.
+- **Upgrades:** Heart Husks (+1 mask), charm notches, and nail reforging at Brass Tock.
+- **Memories (13):** drifting motes of light that replay a moment of the kingdom's past. Together they tell the real story. Reread them in the Journal.
+- **Shortcuts:** levers and Lumen sigils permanently open sealed gates.
+- **Secrets:** cracked walls (any strike), crystal seals (Cleaving Arc) and cracked floors hide charms, hearts and memories.
+- **Map:** the Journal draws every region you've visited, with benches, passages and guardians. The Wayfarer's Compass shows where you are.
+
+---
+
+## Look and performance
+
+- Hand-painted feel from ink-outlined rock, lit rims along every ledge, lumpy front edges, a darker midground layer behind the play plane, three parallax silhouette layers, and dark foreground shapes framing the view.
+- Soft light shafts with drifting dust, mist banks, floating motes, glowing flora with little motes circling each light, per-region fog, colour grading, bloom, depth of field and a vignette.
+- Bright colours are saved for what matters: attacks, warnings, pickups and interactables.
+- Only the region you're standing in runs its particles and lights, enemies only think while a player shares their region, and tiles are merged into large parts (about 6k parts for the whole kingdom).
 
 ---
 
@@ -96,31 +130,34 @@ Each ability opens the way onward: a thorn pit too wide to jump, a sheer shaft, 
 default.project.json        Rojo project (also sets lighting, gravity, character defaults)
 Vesperdeep.rbxl             Ready-to-open place file built from src/
 src/shared/                 Code and data used by both server and client
-  Config.luau               Every tuning value: jump height, dash speed, damage, music ids...
-  Zones.luau                The four maps as ASCII art (edit these to change levels!)
+  Config.luau               Every tuning value: jump height, dash, damage, music and SFX ids...
+  Zones.luau                The seven maps as ASCII art (generated by tools/zones.py)
   Themes.luau               Palettes, fog and lighting per region
-  Dialogue.luau             All NPC and tablet text
-  Charms.luau, Abilities.luau
-src/server/                 World building, enemies, bosses, combat, saving
-  World/Builder.luau        Turns ASCII maps into tiles, outlines, doors, benches, items
-  World/Props.luau          Scenery: parallax backdrops, mist, lights, NPCs, thorns
-  Enemies.luau, Bosses.luau, Combat.luau, PlayerService.luau, Projectiles.luau
-src/client/                 Movement, camera, combat feel, HUD, menus, atmosphere, music
-assets/music/               The original soundtrack (.ogg)
-tools/compose.py            The procedural composer that made the soundtrack
+  Dialogue.luau, Memories.luau, Charms.luau, Abilities.luau, Shop.luau
+src/server/
+  World/Builder.luau        Turns ASCII maps into tiles, layers, doors, gates, switches, items
+  World/Props.luau          Scenery: parallax, midground, foreground, light shafts, mist, NPCs
+  Bosses/init.luau          Boss runtime: intros, phases, telegraphs, hazards, rewards
+  Bosses/Defs/*.luau        One file per guardian
+  Enemies.luau, Combat.luau, PlayerService.luau, Projectiles.luau
+src/client/                 Movement, camera, combat feel, HUD, menus, journal, cinematics, audio
+assets/music/, assets/sfx/  The original soundtrack and sound effects (.ogg)
+tools/zones.py              Level layout script (writes src/shared/Zones.luau)
+tools/compose.py            The procedural composer for all music and sound effects
 ```
 
 ### Editing levels
 
-Open `src/shared/Zones.luau`. Each character is a 4×4-stud tile:
+Edit `tools/zones.py` and run `python tools/zones.py` (or edit `src/shared/Zones.luau` directly). Each character is a 4×4-stud tile:
 
 ```
-#  rough stone (climbable)     %  smooth stone (not climbable)
-^  thorns                      X  cracked wall (secret)
-B  bench                       S  first spawn
-G  boss gate                   T  boss trigger
-1-9 doorway to the matching digit in another zone
-c  mite   f  gnat   s  spore bulb   g  shellguard
+#  rough stone (climbable)      %  smooth stone (not climbable)
+^  thorns                       ~  black ink (hazard)
+X  cracked wall (any strike)    Y  crystal seal (Cleaving Arc only)
+=  sealed gate, opened by a lever (!) or a Lumen sigil (?) in the same region
+B  bench     S  first spawn     G  boss gate
+1-9 doorway to the matching digit in another region
+c mite  m crystal mite  f gnat  w ink wisp  s spore bulb  g shellguard  h hopper
 ```
 
-Other letters, such as NPCs, charms, bosses and Geo caches, are defined in each zone's `specials` table. Keep every row the same length.
+Other letters, such as NPCs, charms, memories, bosses and Geo caches, are defined per region in `tools/zones.py`.

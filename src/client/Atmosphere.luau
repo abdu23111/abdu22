@@ -12,6 +12,7 @@ local Config = require(Shared.Config)
 local Zones = require(Shared.Zones)
 local Themes = require(Shared.Themes)
 local Grid = require(Shared.Grid)
+local Net = require(Shared.Net)
 local State = require(script.Parent.State)
 local HUD = require(script.Parent.HUD)
 
@@ -135,22 +136,54 @@ local function applyZone(index: number)
 	HUD.areaTitle(zone.name, zone.subtitle, "area")
 end
 
-local function bossActiveHere(): boolean
+-- Returns the music key of a boss fighting in the current zone, if any.
+local function bossMusicHere(): string?
 	local root = ReplicatedStorage:FindFirstChild("BossState")
 	if not root then
-		return false
+		return nil
 	end
 	for _, folder in root:GetChildren() do
 		if folder:GetAttribute("Active") and folder:GetAttribute("Zone") == State.zone then
-			return true
+			return (folder:GetAttribute("Music") or "boss") :: string
 		end
 	end
-	return false
+	return nil
+end
+
+-- Performance: only the zone you're in (and neighbours you can glimpse) runs its particles
+-- and lights. Everything else in the world sleeps.
+local zoneEffects: { [number]: { Instance } } = {}
+
+local function collectEffects()
+	local world = workspace:WaitForChild("World")
+	for _, folder in world:GetChildren() do
+		local index = folder:GetAttribute("Index")
+		if typeof(index) == "number" then
+			local list = {}
+			for _, d in folder:GetDescendants() do
+				-- Pickups and switches manage their own glow (collected / opened).
+				if (d:IsA("ParticleEmitter") or d:IsA("PointLight")) and not d:FindFirstAncestor("Items") and not d:FindFirstAncestor("Switches") then
+					table.insert(list, d)
+				end
+			end
+			zoneEffects[index] = list
+		end
+	end
+end
+
+local function setZoneEffects(active: number)
+	for index, list in zoneEffects do
+		local on = index == active
+		for _, effect in list do
+			(effect :: any).Enabled = on
+		end
+	end
 end
 
 function Atmosphere.init()
 	makeEffects()
 	makeMusic()
+	collectEffects()
 
 	HUD.onEnding = function()
 		endingPlayed = true
@@ -170,10 +203,18 @@ function Atmosphere.init()
 				if zone and zone ~= State.zone then
 					State.zone = zone
 					applyZone(zone)
+					setZoneEffects(zone)
+					Net.event("EnterZone"):FireServer(zone)
 				end
 			end
+			local bossMusic = if State.zone then bossMusicHere() else nil
+			State.bossFight = bossMusic ~= nil
 			if State.zone and not endingPlayed then
-				playTrack(if bossActiveHere() then "boss" else Zones[State.zone].music)
+				local key = bossMusic or Zones[State.zone].music
+				if bossMusic and not tracks[key] then
+					key = "boss"
+				end
+				playTrack(key)
 			end
 			task.wait(0.25)
 		end
