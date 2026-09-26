@@ -29,6 +29,9 @@ Movement.onTeleport = function(facing: Vector3?)
 	end
 end
 Movement.init()
+CameraController.onModeChanged = function(mode: string)
+	HUD.notify(if mode == "side" then "Side view" else "Free camera", "Press V to switch views.", "info")
+end
 CameraController.init()
 Characters.init()
 Creatures.init()

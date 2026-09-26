@@ -7,3 +7,6 @@ sourcemap.json
 *.rbxlx.lock
 __pycache__/
 previews/
+tools/harness/out/
+tools/harness/web/node_modules/
+tools/harness/web/shots/

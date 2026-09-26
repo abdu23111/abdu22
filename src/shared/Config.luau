@@ -9,9 +9,9 @@ Config.DEPTH = 14 -- thickness of foreground tiles along Z
 Config.ZONE_SPACING = 1200 -- zones are laid out side by side along X, this far apart
 -- 3D caves: each map is extruded into a winding corridor. Its half-width (in studs) wanders
 -- around CORRIDOR by up to CORRIDOR_WANDER; boss arenas open up to ARENA_HALF.
-Config.CORRIDOR = 17
-Config.CORRIDOR_WANDER = 6
-Config.ARENA_HALF = 30
+Config.CORRIDOR = 21
+Config.CORRIDOR_WANDER = 8
+Config.ARENA_HALF = 32
 Config.WALL_THICKNESS = 14
 
 -- Player vitals
@@ -52,6 +52,13 @@ Config.MAX_FALL_SPEED = 110
 Config.COYOTE_TIME = 0.1
 Config.JUMP_BUFFER = 0.12
 Config.DASH_SPEED = 85
+-- Silkline swinging: latch onto a glowing ring within reach and swing on a rope.
+Config.SWING_RANGE = 22 -- how far away a ring can be caught
+Config.SWING_MIN_ROPE = 7
+Config.SWING_MAX_ROPE = 17
+Config.SWING_PUMP = 42 -- how hard held direction pumps the swing
+Config.SWING_MAX_SPEED = 100
+Config.SWING_RELEASE_LIFT = 14 -- upward boost when letting go (more if released with jump)
 Config.DASH_TIME = 0.18
 Config.DASH_COOLDOWN = 0.45
 Config.WALL_SLIDE_SPEED = 9
@@ -84,6 +91,7 @@ Config.MUSIC = {
 	mines = "",
 	archive = "",
 	hollow = "",
+	glowmire = "",
 	boss = "",
 	boss_final = "",
 	ending = "",

@@ -190,13 +190,27 @@ local function build(model: Model)
 	playAnim(entry, (model:GetAttribute("Anim") or "idle") :: string, true)
 
 	model:GetAttributeChangedSignal("Anim"):Connect(function()
-		playAnim(entry, (model:GetAttribute("Anim") or "idle") :: string, false)
+		local anim = (model:GetAttribute("Anim") or "idle") :: string
+		playAnim(entry, anim, false)
+		-- Lunges and slams kick up dust.
+		if (anim == "attack" or anim == "slam") and not entry.dead and entry.anchor > 0 then
+			Fx.puff(entry.pos + Vector3.new(0, 0.5, 0), entry.color:Lerp(Color3.fromRGB(170, 160, 150), 0.6), math.max(2, hitbox.Size.X * 0.6), 0.4)
+		end
 	end)
 	model:GetAttributeChangedSignal("AnimAt"):Connect(function()
 		playAnim(entry, (model:GetAttribute("Anim") or "idle") :: string, true)
 	end)
 	model:GetAttributeChangedSignal("Warn"):Connect(function()
 		entry.warn = model:GetAttribute("Warn") == true
+		-- Telegraph: a flare at the eyes and a warning ring on the ground, so every attack
+		-- announces itself even out of the corner of your eye.
+		if entry.warn and not entry.dead then
+			local size = hitbox.Size
+			local eye = entry.pos + Vector3.new(0, size.Y * 0.75, 0) + entry.facing * size.X * 0.4
+			Fx.sparks(eye, WARN_COLOR, 6, 1, Vector3.yAxis)
+			Fx.light(eye, WARN_COLOR, 12, 2, 0.35)
+			Fx.ring(entry.pos, WARN_COLOR, math.max(size.X, size.Z) * (if entry.boss then 1.4 else 1.1), 0.45, 0.55)
+		end
 	end)
 	model:GetAttributeChangedSignal("HitAt"):Connect(function()
 		entry.flash = 1

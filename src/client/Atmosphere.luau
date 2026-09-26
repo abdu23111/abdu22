@@ -34,23 +34,25 @@ local function makeEffects()
 	end
 	-- A volumetric haze that swallows the far caverns; each region tints it.
 	atmosphere = Instance.new("Atmosphere")
-	atmosphere.Density = 0.4
+	atmosphere.Density = 0.3
 	atmosphere.Offset = 0
 	atmosphere.Glare = 0
-	atmosphere.Haze = 1.6
+	atmosphere.Haze = 1.2
 	atmosphere.Color = Color3.fromRGB(16, 19, 30)
 	atmosphere.Decay = Color3.fromRGB(8, 9, 14)
 	atmosphere.Parent = Lighting
 	Lighting.Brightness = 1
 	Lighting.ClockTime = 0
 	Lighting.GlobalShadows = true
-	Lighting.EnvironmentDiffuseScale = 0.2
-	Lighting.EnvironmentSpecularScale = 0.2
+	Lighting.EnvironmentDiffuseScale = 0.3
+	Lighting.EnvironmentSpecularScale = 0.35
+	-- Lift the whole image a little: caves should be moody, not black.
+	Lighting.ExposureCompensation = 0.35
 
 	colorCorrection = Instance.new("ColorCorrectionEffect")
-	colorCorrection.Contrast = 0.12
-	colorCorrection.Saturation = -0.12
-	colorCorrection.Brightness = 0.02
+	colorCorrection.Contrast = 0.1
+	colorCorrection.Saturation = 0.1
+	colorCorrection.Brightness = 0.04
 	colorCorrection.Parent = Lighting
 
 	local bloom = Instance.new("BloomEffect")
@@ -88,7 +90,7 @@ local function makeEffects()
 		f.Parent = gui
 		local g = Instance.new("UIGradient")
 		g.Rotation = e[3]
-		g.Transparency = NumberSequence.new(0.35, 1)
+		g.Transparency = NumberSequence.new(0.55, 1)
 		g.Parent = f
 	end
 end
@@ -146,7 +148,7 @@ local function applyZone(index: number)
 	TweenService:Create(atmosphere, info, {
 		Color = theme.fog,
 		Decay = theme.fog:Lerp(Color3.new(0, 0, 0), 0.5),
-		Density = math.clamp(95 / theme.fogEnd, 0.3, 0.5),
+		Density = math.clamp(85 / theme.fogEnd, 0.2, 0.34),
 	}):Play()
 	HUD.areaTitle(zone.name, zone.subtitle, "area")
 end

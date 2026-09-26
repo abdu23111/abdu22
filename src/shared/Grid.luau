@@ -54,7 +54,8 @@ function Grid.halfWidth(zoneIndex: number, col: number): number
 			end
 		end
 		for c = 1, w do
-			local base = Config.CORRIDOR + Config.CORRIDOR_WANDER * math.noise(c * 0.07, zoneIndex * 3.1)
+			local wide = zone.wide or 1
+			local base = (Config.CORRIDOR + Config.CORRIDOR_WANDER * math.noise(c * 0.07, zoneIndex * 3.1)) * wide
 			if arena and c >= arena[1] - 2 and c <= arena[2] + 2 then
 				-- Ease into the arena's wider chamber.
 				local inside = math.min(c - (arena[1] - 2), (arena[2] + 2) - c)

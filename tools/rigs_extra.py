@@ -290,8 +290,9 @@ def ilo():
 
 def oriel():
     """Oriel: the faded ghost of an earlier lantern-bearer, drifting and flickering."""
-    r = wanderer("oriel", cloak=(150, 150, 170), cloak_dark=(120, 120, 140), mask=(230, 230, 240), eye=(30, 30, 50),
-                 nail=(200, 200, 210), glow=(220, 220, 255))
+    r = wanderer("oriel", cloak=(150, 150, 170), cloak_dark=(120, 120, 140), mask=(230, 230, 240), eye=(170, 200, 255),
+                 nail=(200, 200, 210), glow=(220, 220, 255), lining=(190, 190, 210), scarf=(170, 170, 200),
+                 fur=(220, 222, 236), wing=(200, 200, 225), chitin=(120, 120, 140), gold=(200, 200, 215))
     r.anchor = 0
     for p in r.parts:
         p["a"] = max(p.get("a", 0), 0.45)
@@ -835,7 +836,8 @@ def murrow():
 def echo():
     """The Hollow Echo: the Wanderer's silhouette, inverted: a dark mask with burning pale eyes."""
     r = wanderer("echo", cloak=(12, 12, 16), cloak_dark=(6, 6, 9), mask=(26, 26, 30), eye=(230, 225, 255),
-                 nail=(205, 195, 255), glow=(205, 195, 255), shade=True)
+                 nail=(205, 195, 255), glow=(205, 195, 255), shade=True, lining=(28, 24, 36), scarf=(40, 22, 34),
+                 fur=(34, 32, 42), wing=(30, 28, 44), chitin=(10, 10, 14), gold=(90, 86, 120))
     r.anchor = 3.0
     for p in r.parts:
         if p.get("t") == "eye":
@@ -849,9 +851,73 @@ def echo():
     return r
 
 
+def recolor(r, old, new):
+    for p in r.parts:
+        if tuple(p["c"]) == tuple(old):
+            p["c"] = list(new)
+
+
+def enrich(r):
+    """A second pass that gives every enemy a stronger colour identity and a few details:
+    glowing markings, plates, stripes, crests. Shapes and bones are untouched."""
+    n = r.name
+    if n == "mite":
+        recolor(r, (88, 78, 70), (150, 92, 60))
+        recolor(r, (68, 58, 50), (118, 70, 46))
+        for x in (-1.1, -0.35, 0.4):
+            r.part("body", "ball", (0.7, 0.32, 1.7), (x, 1.12, 0), rot=10, color=(96, 56, 38))
+        for side in (-1, 1):
+            for x in (-0.9, 0.0):
+                r.part("body", "ball", (0.3, 0.3, 0.18), (x, 0.55, side * 0.98), color=(255, 176, 80), mat="n", tag="glow")
+        for side in (-1, 1):
+            r.part("head", "tri", (0.16, 0.45, 0.14), (0.75, -0.35, side * 0.25), rot=200, color=(60, 40, 30))
+    elif n == "crystal_mite":
+        recolor(r, (70, 54, 92), (110, 70, 160))
+        recolor(r, (50, 34, 72), (80, 46, 124))
+        for side in (-1, 1):
+            r.part("body", "ball", (0.3, 0.3, 0.18), (-0.5, 0.6, side * 0.98), color=(120, 220, 255), mat="n", tag="glow")
+    elif n == "gnat":
+        recolor(r, (58, 44, 72), (92, 52, 110))
+        recolor(r, (74, 58, 90), (120, 74, 140))
+        for i, x in enumerate((-0.35, -0.75)):
+            r.part("body", "ball", (0.35, 1.6 - i * 0.25, 1.65 - i * 0.25), (x, -0.05, 0), rot=10, color=(240, 150, 60))
+        for z in (-0.3, 0, 0.3):
+            r.part("body", "ball", (0.35, 0.45, 0.35), (0.2, 0.95, z), color=(170, 120, 200))
+    elif n == "wisp":
+        for i, (x, y, z) in enumerate(((0.2, 1.4, 0.5), (-0.4, 1.6, -0.4), (-0.9, 1.1, 0.2))):
+            r.part("body", "ball", (0.3, 0.3, 0.3), (x, y, z), color=(160, 255, 240), mat="n", tag="glow")
+    elif n == "bulb":
+        recolor(r, (96, 124, 72), (120, 170, 80))
+        for i in range(6):
+            a = i / 6 * math.pi * 2
+            r.part("pod", "ball", (0.9, 0.3, 0.7), (math.cos(a) * 1.1, -0.2, math.sin(a) * 1.1), rot=15, color=(236, 110, 170))
+        r.part("pod", "ball", (0.5, 0.5, 0.5), (0, 2.1, 0), color=(255, 140, 200), mat="n", tag="glow")
+    elif n == "shellguard":
+        recolor(r, (70, 74, 96), (48, 80, 150))
+        recolor(r, (52, 56, 76), (36, 60, 120))
+        for z in (-1.0, 1.0):
+            r.part("shield", "box", (0.42, 3.05, 0.16), (0.12, 0.1, z), color=(226, 180, 90), mat="m")
+        r.part("shield", "box", (0.45, 0.6, 0.6), (0.14, 0.1, 0), rot=45, color=(255, 200, 110), mat="n", tag="glow")
+        r.part("head", "ball", (0.5, 1.3, 0.35), (-0.3, 1.2, 0), rot=35, color=(200, 50, 60))
+        r.part("body", "box", (2.5, 0.2, 2.5), (0, 1.0, 0), color=(226, 180, 90), mat="m")
+    elif n == "hopper":
+        recolor(r, (30, 30, 34), (70, 44, 100))
+        for side in (-1, 1):
+            r.part("body", "tri", (0.3, 0.9, 0.3), (-0.6 + side * 0.1, 1.3, side * 0.3), rot=-20, color=(150, 110, 200))
+        r.part("body", "tri", (0.3, 1.1, 0.3), (-0.2, 1.4, 0), rot=-10, color=(170, 130, 220))
+        for leg in ("thighL", "thighR", "shinL", "shinR"):
+            r.part(leg, "box", (0.34, 0.18, 0.34), (0, -0.5, 0), color=(120, 80, 160))
+        for p in r.parts:
+            if p.get("t") == "eye":
+                p["c"] = [240, 120, 255]
+                p["m"] = "n"
+    return r
+
+
 def all_rigs():
-    return [
+    rigs = [
         wick(), tock(), lirra(), pell(), quill(), ilo(), oriel(), sael(),
         mite(), mite("crystal_mite", (70, 54, 92), crystals=True), gnat(), wisp(), bulb(), shellguard(), hopper(),
         gravelmaw(), vantis(), widow(), asterion(), quartzelle(), murrow(), echo(),
     ]
+    return [enrich(r) for r in rigs]

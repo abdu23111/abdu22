@@ -109,9 +109,11 @@ def mask_face(r, bone, center, size, eye_style="tall", eye_gap=0.19, color=MASK,
 
 # --------------------------------------------------------------------- the player
 
-def wanderer(name="wanderer", cloak=CLOAK, cloak_dark=CLOAK_DARK, mask=MASK, eye=EYE, nail=NAIL, glow=NAIL_GLOW, shade=False):
-    """The Wanderer: a small masked vessel with feathered antennae, a round travelling
-    cloak, a slender needle-nail and an unlit lantern at the hip."""
+def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask=MASK, eye=(255, 190, 90), nail=NAIL, glow=NAIL_GLOW, shade=False,
+             lining=(232, 150, 70), scarf=(196, 72, 52), fur=(240, 228, 204), wing=(176, 150, 200), chitin=(58, 36, 50), gold=(226, 180, 90)):
+    """The Wanderer: a young moth adventurer. A pale oval mask with big amber eyes, a cream
+    fur ruff, feathered fronds for antennae, a teal travelling cloak lined in amber, a rust
+    scarf, dusty wings folded under the cloak, a lantern at the hip and a gilded leaf-blade."""
     r = Rig(name, 3.0)
     r.bone("root")
     r.bone("hips", "root", (0, 1.25))
@@ -122,48 +124,76 @@ def wanderer(name="wanderer", cloak=CLOAK, cloak_dark=CLOAK_DARK, mask=MASK, eye
     r.bone("lantern", "body", (-0.2, 0.55, -1.0), rest=-8)
     r.bone("armB", "body", (0.05, 1.35, -0.85), rest=-15)
     r.bone("head", "body", (0.08, 1.85))
-    r.bone("antB", "head", (-0.15, 1.05, -0.3), rest=42)
-    r.bone("antF", "head", (-0.15, 1.05, 0.3), rest=42)
+    r.bone("antB", "head", (-0.1, 1.0, -0.32), rest=38)
+    r.bone("antF", "head", (-0.1, 1.0, 0.32), rest=38)
     r.bone("armF", "body", (0.1, 1.35, 0.85), rest=20)
     r.bone("nail", "armF", (0.05, -0.75, 0.15), rest=40)
 
-    # Legs: short dark stalks with rounded feet.
+    # Legs: jointed chitin with wrapped leather boots.
     for leg in ("legB", "legF"):
-        tone = INK if leg == "legF" else (10, 9, 13)
-        r.part(leg, "box", (0.32, 0.95, 0.32), (0, -0.5, 0), color=tone)
-        r.part(leg, "ball", (0.55, 0.32, 0.4), (0.12, -1.02, 0), color=tone)
-    # Left arm, mostly hidden by the cloak.
-    r.part("armB", "box", (0.26, 0.85, 0.26), (0, -0.42, 0), color=(12, 11, 16))
-    # Cloak: a round bell with a collar and a tattered hem all the way around.
-    r.part("body", "ball", (2.1, 2.35, 2.1), (-0.05, 0.95, 0), color=cloak)
-    r.part("body", "ball", (1.5, 1.0, 1.7), (0.15, 1.6, 0), color=cloak_dark)
-    for i in range(8):
-        a = i / 8 * math.pi * 2
-        hx, hz = math.cos(a) * 0.85, math.sin(a) * 0.85
-        r.part("hem", "tri", (0.5, 0.65 + 0.12 * (i % 3), 0.35), (hx - 0.05, -0.08, hz), rot=180, color=cloak_dark, flip=(i % 2 == 0))
+        tone = chitin if leg == "legF" else tuple(int(c * 0.75) for c in chitin)
+        r.part(leg, "box", (0.34, 0.9, 0.34), (0, -0.45, 0), color=tone)
+        r.part(leg, "ball", (0.62, 0.42, 0.5), (0.14, -0.98, 0), color=(126, 76, 50))
+        r.part(leg, "box", (0.44, 0.12, 0.44), (0.02, -0.7, 0), color=(92, 56, 40))
+    # Back arm, mostly hidden by the cloak.
+    r.part("armB", "box", (0.28, 0.85, 0.28), (0, -0.42, 0), color=chitin)
+    # Folded wings under the cloak: dusty lavender with a glowing eye-spot, they stick out
+    # behind and give the silhouette its shape.
+    for side in (-1, 1):
+        r.part("body", "ball", (0.3, 2.0, 1.25), (-0.95, 1.2, side * 0.55), rot=24, color=wing)
+        r.part("body", "ball", (0.32, 0.5, 0.5), (-1.0, 1.35, side * 0.6), rot=24, color=(255, 196, 120), mat="n", alpha=0.2)
+    # Cloak: a bell of teal cloth open at the front to show the amber lining and fur belly.
+    r.part("body", "ball", (2.15, 2.35, 2.2), (-0.1, 0.95, 0), color=cloak)
+    r.part("body", "ball", (1.3, 1.6, 1.3), (0.5, 0.9, 0), color=lining)
+    r.part("body", "ball", (0.8, 1.0, 0.85), (0.72, 0.8, 0), color=tuple(int(c * 0.93) for c in fur))
+    # Cream ruff around the neck.
+    for i in range(7):
+        a = (i / 7) * math.pi * 2
+        r.part("body", "ball", (0.56, 0.42, 0.56), (math.cos(a) * 0.6 - 0.05, 1.78 + (i % 2) * 0.06, math.sin(a) * 0.6), color=fur)
+    # Scarf: knotted at the throat, tails streaming behind.
+    r.part("body", "ball", (0.5, 0.42, 0.5), (0.72, 1.55, 0.25), color=scarf)
+    r.part("hem", "box", (0.9, 0.3, 0.12), (-1.25, 1.5, 0.35), rot=-18, color=scarf, mat="f")
+    r.part("hem", "box", (0.75, 0.26, 0.12), (-1.2, 1.22, 0.2), rot=-32, color=tuple(int(c * 0.8) for c in scarf), mat="f")
+    # Tattered hem all the way around.
+    for i in range(9):
+        a = i / 9 * math.pi * 2
+        hx, hz = math.cos(a) * 0.9, math.sin(a) * 0.9
+        r.part("hem", "tri", (0.55, 0.62 + 0.14 * (i % 3), 0.35), (hx - 0.1, -0.08, hz), rot=180, color=cloak_dark, flip=(i % 2 == 0))
+    # Satchel on the right hip.
+    r.part("body", "box", (0.55, 0.6, 0.35), (-0.25, 0.55, 1.05), color=(120, 78, 50))
+    r.part("body", "box", (0.57, 0.18, 0.37), (-0.25, 0.8, 1.05), color=(92, 56, 40))
     # Lantern hanging at the left hip.
     r.part("lantern", "box", (0.12, 0.35, 0.12), (0, -0.15, 0), color=INK)
-    r.part("lantern", "ball", (0.5, 0.6, 0.5), (0, -0.55, 0), color=(60, 56, 50), mat="g", alpha=0.25)
-    r.part("lantern", "ball", (0.24, 0.3, 0.24), (0, -0.55, 0), color=WARM, mat="n", tag="glow")
-    r.part("lantern", "box", (0.44, 0.1, 0.44), (0, -0.25, 0), color=INK)
-    # Head: the mask, with cheek plates and a hairline crack.
-    mask_face(r, "head", (0.05, 0.45), (1.85, 1.75), "tall", color=mask, eye_color=eye)
-    r.part("head", "box", (0.05, 0.45, 0.05), (0.62, 1.05, 0.28), rot=-25, color=(90, 86, 84))
-    # Feathered antennae sweeping back.
+    r.part("lantern", "ball", (0.55, 0.65, 0.55), (0, -0.58, 0), color=(60, 56, 50), mat="g", alpha=0.25)
+    r.part("lantern", "ball", (0.28, 0.34, 0.28), (0, -0.58, 0), color=WARM, mat="n", tag="glow")
+    r.part("lantern", "box", (0.48, 0.1, 0.48), (0, -0.25, 0), color=gold, mat="m")
+    # Head: an oval mask with big amber eyes, dark pupils, brows and a small gem.
+    r.part("head", "ball", (1.72, 1.9, 1.62), (0.05, 0.5, 0), color=mask)
+    r.part("head", "ball", (1.4, 0.6, 1.3), (0.12, 0.05, 0), color=MASK_SHADE)
+    for side in (-1, 1):
+        z = side * 0.36
+        r.part("head", "ball", (0.2, 0.62, 0.44), (0.83, 0.52, z), color=eye, mat="n", tag="eye")
+        r.part("head", "ball", (0.12, 0.34, 0.22), (0.9, 0.48, z * 0.95), color=(24, 14, 10), tag="eye")
+        r.part("head", "ball", (0.06, 0.12, 0.1), (0.95, 0.62, z * 0.9 + 0.05), color=(255, 250, 240), mat="n", tag="eye")
+        r.part("head", "box", (0.1, 0.1, 0.36), (0.8, 0.95, z * 1.05), rot=-8 * side, color=(70, 50, 56))
+        r.part("head", "ball", (0.1, 0.18, 0.26), (0.78, 0.12, side * 0.48), color=(240, 150, 140))
+    r.part("head", "box", (0.12, 0.18, 0.18), (0.8, 1.2, 0), rot=45, color=(110, 230, 220), mat="n")
+    # Feathered antennae: fronds that sweep back like a moth's.
     for ant in ("antB", "antF"):
-        # A thin stalk that curls back into a feathered plume.
-        r.part(ant, "box", (0.11, 0.7, 0.11), (0, 0.33, 0), color=mask)
-        r.part(ant, "box", (0.1, 0.55, 0.1), (-0.12, 0.85, 0), rot=25, color=mask)
-        r.part(ant, "ball", (0.3, 0.95, 0.14), (-0.45, 1.25, 0), rot=55, color=mask)
-        r.part(ant, "ball", (0.2, 0.6, 0.12), (-0.75, 1.3, 0), rot=75, color=MASK_SHADE)
-    # Right arm and the needle-nail.
-    r.part("armF", "box", (0.28, 0.85, 0.28), (0, -0.4, 0), color=INK)
-    r.part("armF", "ball", (0.36, 0.36, 0.36), (0, -0.82, 0), color=INK)
-    r.part("nail", "box", (0.2, 0.55, 0.2), (0, -0.25, 0), color=(40, 36, 44))
-    r.part("nail", "box", (0.5, 0.12, 0.25), (0, -0.52, 0), color=(70, 64, 80))
-    r.part("nail", "box", (0.15, 2.0, 0.12), (0, -1.55, 0), color=nail)
-    r.part("nail", "tri", (0.15, 0.45, 0.12), (0.0, -2.75, 0), rot=180, color=nail)
-    r.part("nail", "box", (0.05, 1.9, 0.14), (0.06, -1.5, 0), color=glow, mat="n", alpha=0.35, tag="glow")
+        r.part(ant, "box", (0.1, 0.8, 0.1), (0, 0.38, 0), color=gold)
+        r.part(ant, "box", (0.09, 0.7, 0.09), (-0.2, 0.98, 0), rot=30, color=gold)
+        for k, (ox, oy, w, h, rot) in enumerate(((-0.05, 0.5, 0.5, 0.26, 70), (-0.15, 0.85, 0.62, 0.28, 60), (-0.35, 1.15, 0.7, 0.28, 50), (-0.6, 1.4, 0.6, 0.24, 40))):
+            r.part(ant, "ball", (w, h, 0.1), (ox + 0.12, oy, 0), rot=rot, color=fur if k % 2 == 0 else (250, 238, 214))
+    # Front arm and the leaf-blade: wrapped grip, gilded guard and pommel, a broad blade
+    # with a glowing fuller.
+    r.part("armF", "box", (0.3, 0.85, 0.3), (0, -0.4, 0), color=chitin)
+    r.part("armF", "ball", (0.4, 0.4, 0.4), (0, -0.82, 0), color=(126, 76, 50))
+    r.part("nail", "ball", (0.26, 0.26, 0.26), (0, 0.05, 0), color=gold, mat="m")
+    r.part("nail", "box", (0.18, 0.55, 0.18), (0, -0.25, 0), color=(92, 56, 40))
+    r.part("nail", "box", (0.8, 0.14, 0.28), (0, -0.56, 0), color=gold, mat="m")
+    r.part("nail", "box", (0.2, 2.3, 0.4), (0, -1.78, 0), color=nail, mat="m")
+    r.part("nail", "tri", (0.2, 0.6, 0.4), (0.0, -3.22, 0), rot=180, color=nail, mat="m")
+    r.part("nail", "box", (0.05, 2.1, 0.12), (0.08, -1.7, 0), color=glow, mat="n", alpha=0.2, tag="glow")
     if shade:
         # The Echo: tattered wisps of darkness trailing from the cloak.
         for i, (dx, dy, dz) in enumerate(((-1.2, 1.4, 0.3), (-1.35, 0.7, -0.3), (-1.1, 2.1, 0))):
@@ -355,6 +385,19 @@ def wanderer(name="wanderer", cloak=CLOAK, cloak_dark=CLOAK_DARK, mask=MASK, eye
         "hem": loop_keys(0.4, (-20,), (-24,)),
         "antF": loop_keys(0.4, (-20,), (-14,)),
         "antB": loop_keys(0.4, (-18,), (-12,)),
+    })
+    # Swinging on the Silkline: one arm up holding the thread, legs and cloak trailing.
+    r.clip("swing", 0.8, {
+        "armF": loop_keys(0.8, (165,), (172,)),
+        "nail": loop_keys(0.8, (-30,), (-34,)),
+        "armB": loop_keys(0.8, (140,), (150,)),
+        "body": loop_keys(0.8, (-8, 0, 0, 0.96, 1.06), (-4, 0, 0, 0.97, 1.05)),
+        "legF": loop_keys(0.8, (-25,), (-15,)),
+        "legB": loop_keys(0.8, (20,), (30,)),
+        "hem": loop_keys(0.8, (-24,), (-14,)),
+        "head": loop_keys(0.8, (-10,), (-6,)),
+        "antF": loop_keys(0.8, (30,), (40,)),
+        "antB": loop_keys(0.8, (34,), (44,)),
     })
     # Death: staggers, drops to its knees, and topples; the mask rolls free.
     r.clip("death", 1.6, {

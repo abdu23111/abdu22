@@ -33,6 +33,10 @@ local localEntry: Entry? = nil
 local hitStopUntil = 0
 local fxFolder: Folder
 
+-- The hero is drawn a little larger than the Humanoid underneath, so it reads clearly on screen.
+local HERO_SCALE = 1.3
+Characters.HERO_SCALE = HERO_SCALE
+
 local SWING_CLIPS = { side = "attackSide", up = "attackUp", down = "attackDown", cleave = "cleave", bolt = "bolt" }
 -- Higher priority one-shots can interrupt lower ones.
 local PRIORITY = { death = 5, hurt = 4, cleave = 3, attackSide = 3, attackUp = 3, attackDown = 3, bolt = 3, flip = 2, dodge = 2, land = 1, jumpStart = 1 }
@@ -83,7 +87,7 @@ local function build(character: Model)
 		return
 	end
 	local isLocal = character == localPlayer.Character
-	local rig = Rig.new("wanderer", fxFolder)
+	local rig = Rig.new("wanderer", fxFolder, HERO_SCALE)
 	-- The lantern at the hip lights the way (and casts shadows for your own character).
 	for _, part in rig:partsWithTag("glow") do
 		if part.Material == Enum.Material.Neon and part.Color.R > part.Color.B then
@@ -157,6 +161,8 @@ local function locomotion(entry: Entry, root: BasePart): (string, number)
 			return "dodge", 1
 		elseif action == "wall" then
 			return "wall", 1
+		elseif action == "swing" then
+			return "swing", 1
 		elseif action == "heal" then
 			return "heal", 1
 		elseif State.charging then

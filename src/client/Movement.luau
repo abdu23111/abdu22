@@ -1,7 +1,8 @@
 -- Third-person character controller. Movement is relative to the camera; jumps use coyote
 -- time, buffering and variable height; the Drift Cloak dashes, the Sidestep dodges with
 -- brief invulnerability, Thorn Claws cling to any rough wall and Veil Wings give a second
--- jump. Also handles doorways between regions, hazard respawns and knockback.
+-- jump. The Silkline swings from glowing rings. Also handles doorways between regions,
+-- hazard respawns and knockback.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,6 +27,7 @@ Movement.onLand = nil :: ((Vector3, number) -> ())?
 Movement.onStep = nil :: ((Vector3) -> ())?
 Movement.onJump = nil :: (() -> ())?
 Movement.onHurt = nil :: (() -> ())?
+Movement.onSwing = nil :: ((Vector3?) -> ())? -- anchor when a swing starts, nil when it ends
 
 local jumpPressedAt = -1
 local jumpCutArmed = false
@@ -51,6 +53,10 @@ local lastSafeCheck = 0
 local doorCooldownUntil = 0
 local lastStepDust = 0
 local wallNormal: Vector3? = nil
+local swing: { anchor: Vector3, length: number }? = nil
+local swingCooldownUntil = 0
+local swingSpent = false -- each press of the swing button catches at most one ring
+local anchors: { BasePart } = {}
 
 local world = workspace:WaitForChild("World")
 local doorsFolder = world:WaitForChild("Doors")
@@ -78,6 +84,12 @@ local function refreshFilters()
 	end
 	wallParams.FilterDescendantsInstances = solids
 	hazardParams.FilterDescendantsInstances = hazards
+	table.clear(anchors)
+	for _, d in world:GetDescendants() do
+		if d:IsA("BasePart") and d.Name == "SwingAnchor" then
+			table.insert(anchors, d)
+		end
+	end
 end
 
 local function flat(v: Vector3): Vector3
@@ -129,10 +141,113 @@ function Movement.setRooted(on: boolean)
 	rooted = on
 end
 
+-- ===== Silkline swinging =====
+
+local function nearestAnchor(pos: Vector3): BasePart?
+	local best, bestD = nil, Config.SWING_RANGE
+	for _, a in anchors do
+		local d = (a.Position - pos).Magnitude
+		-- Rings below you can't hold you up.
+		if d < bestD and a.Position.Y > pos.Y - 1 then
+			best, bestD = a, d
+		end
+	end
+	return best
+end
+
+local function endSwing(withJump: boolean)
+	local humanoid, root = State.humanoid, State.root
+	swing = nil
+	State.swingAnchor = nil
+	swingCooldownUntil = os.clock() + 0.25
+	if Movement.onSwing then
+		Movement.onSwing(nil)
+	end
+	if not humanoid or not root then
+		return
+	end
+	humanoid.PlatformStand = false
+	humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+	local v = root.AssemblyLinearVelocity
+	local lift = Config.SWING_RELEASE_LIFT + (if withJump then 16 else 0)
+	v = Vector3.new(v.X * 1.08, math.max(v.Y, 0) + lift, v.Z * 1.08)
+	root.AssemblyLinearVelocity = v
+	-- Keep the swing's momentum for a moment instead of snapping to walking speed.
+	Movement.shove(v, 0.45)
+	usedDouble = false
+	dashReady = true
+	jumpedSinceGround = true
+	jumpCutArmed = false
+	groundIgnoreUntil = os.clock() + 0.1
+	if withJump then
+		jumpPressedAt = -1
+		Sfx.play("jump", 1.15)
+	end
+end
+
+local function startSwing(anchor: BasePart)
+	local humanoid, root = State.humanoid, State.root
+	if not humanoid or not root then
+		return
+	end
+	local d = (root.Position - anchor.Position).Magnitude
+	swing = { anchor = anchor.Position, length = math.clamp(d, Config.SWING_MIN_ROPE, Config.SWING_MAX_ROPE) }
+	State.swingAnchor = anchor.Position
+	dashUntil, dodgeUntil, lockUntil = 0, 0, 0
+	wallNormal = nil
+	humanoid.PlatformStand = true
+	-- Carry the approach speed into the swing, with a little kick the way you're facing.
+	root.AssemblyLinearVelocity += State.facingVector * 10
+	Sfx.play("dash", 1.5)
+	if Movement.onSwing then
+		Movement.onSwing(anchor.Position)
+	end
+end
+
+-- One physics step on the rope: gravity (from the engine) swings you; holding a direction
+-- pumps the swing; the rope stops you drifting further than its length from the ring.
+local function swingStep(dt: number, root: BasePart)
+	local s = swing :: { anchor: Vector3, length: number }
+	local r = root.Position - s.anchor
+	local d = r.Magnitude
+	if d < 1e-3 then
+		return
+	end
+	local n = r / d
+	local v = root.AssemblyLinearVelocity
+	local move = Movement.moveWorld()
+	local tangent = move - n * move:Dot(n)
+	v += tangent * Config.SWING_PUMP * dt
+	-- The rope reels in a little toward a comfortable length.
+	s.length = math.max(Config.SWING_MIN_ROPE, s.length - dt * 3)
+	if d > s.length then
+		local outward = v:Dot(n)
+		if outward > 0 then
+			v -= n * outward
+		end
+		local fixed = s.anchor + n * s.length
+		local look = Vector3.new(v.X, 0, v.Z)
+		if look.Magnitude < 1 then
+			look = State.facingVector
+		end
+		root.CFrame = CFrame.lookAt(fixed, fixed + look.Unit)
+	end
+	if v.Magnitude > Config.SWING_MAX_SPEED then
+		v = v.Unit * Config.SWING_MAX_SPEED
+	end
+	root.AssemblyLinearVelocity = v
+	root.AssemblyAngularVelocity = Vector3.zero
+	State.action = "swing"
+	State.moveSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
+end
+
 function Movement.teleport(position: Vector3, facing: Vector3?)
 	local character, root = State.character, State.root
 	if not character or not root then
 		return
+	end
+	if swing then
+		endSwing(false)
 	end
 	local f = facing or State.facingVector
 	character:PivotTo(CFrame.lookAt(position, position + f))
@@ -177,15 +292,39 @@ local function transition(door: BasePart)
 	end)
 end
 
-local function step(_dt: number)
+local function step(dt: number)
 	local humanoid, root = State.humanoid, State.root
 	if not humanoid or not root or not humanoid.Parent then
 		return
 	end
 	local now = os.clock()
-	local v = root.AssemblyLinearVelocity
 	local facing = flat(root.CFrame.LookVector)
 	State.facingVector = if facing.Magnitude > 0.5 then facing else Vector3.xAxis
+
+	-- Swinging takes over completely until the rope is let go.
+	if swing then
+		if State.frozen() or humanoid.Health <= 0 then
+			endSwing(false)
+		elseif now - jumpPressedAt <= Config.JUMP_BUFFER then
+			endSwing(true)
+		elseif not Input.swingHeld then
+			endSwing(false)
+		else
+			swingStep(dt, root)
+			State.grounded = false
+			wasGrounded = false
+			return
+		end
+	elseif Input.swingHeld and not swingSpent and now >= swingCooldownUntil and not State.frozen() and not rooted then
+		-- Holding the button catches the first ring that comes within reach.
+		local anchor = nearestAnchor(root.Position)
+		if anchor then
+			swingSpent = true
+			startSwing(anchor)
+			return
+		end
+	end
+	local v = root.AssemblyLinearVelocity
 
 	if State.frozen() or rooted then
 		humanoid:Move(Vector3.zero)
@@ -394,6 +533,8 @@ local function onCharacter(character: Model)
 	end
 	lastSafe = nil
 	rooted = false
+	swing = nil
+	State.swingAnchor = nil
 	refreshFilters()
 	State.freeze("dead", false)
 	State.freeze("hazard", false)
@@ -425,6 +566,9 @@ function Movement.init()
 	Input.on("dodge", function()
 		dodgeRequestedAt = os.clock()
 	end)
+	Input.on("swingRelease", function()
+		swingSpent = false
+	end)
 
 	Net.event("Knockback").OnClientEvent:Connect(function(direction: Vector3)
 		local root = State.root
@@ -433,6 +577,9 @@ function Movement.init()
 		end
 		Sfx.play("hurt")
 		dashUntil = 0
+		if swing then
+			endSwing(false)
+		end
 		local push = flat(direction) * Config.KNOCKBACK.X
 		Movement.shove(push, 0.16)
 		root.AssemblyLinearVelocity = Vector3.new(push.X, Config.KNOCKBACK.Y, push.Z)
@@ -444,6 +591,9 @@ function Movement.init()
 
 	Net.event("HazardRespawn").OnClientEvent:Connect(function()
 		Sfx.play("hurt")
+		if swing then
+			endSwing(false)
+		end
 		State.freeze("hazard", true)
 		if Movement.onHurt then
 			Movement.onHurt()

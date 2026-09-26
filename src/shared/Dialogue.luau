@@ -257,6 +257,17 @@ local Dialogue: { [string]: Speaker } = {
 			},
 		},
 	},
+	tablet_glowmire = {
+		name = "Pilgrim's Marker",
+		sets = {
+			{
+				lines = {
+					"'HERE THE LIGHT GROWS WILD. TAKE NONE. LEAVE NONE. MIND THE STILL WATER.'",
+					"Below, in a smaller hand: 'the rings above the lake will carry you, if you let go at the top.'",
+				},
+			},
+		},
+	},
 }
 
 return Dialogue

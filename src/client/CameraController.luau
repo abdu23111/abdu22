@@ -11,6 +11,7 @@ local State = require(script.Parent.State)
 local Input = require(script.Parent.Input)
 
 local CameraController = {}
+CameraController.onModeChanged = nil :: ((string) -> ())?
 
 local DISTANCE = 17
 local ARENA_DISTANCE = 22
@@ -25,6 +26,10 @@ local focus = Vector3.zero
 local shakeAmount = 0
 local snapNext = true
 local cinematic: { target: Vector3, startTime: number, untilTime: number, startYaw: number }? = nil
+-- "orbit": free third-person camera. "side": a classic side-on view of the path (V toggles).
+local mode = "orbit"
+local SIDE_DISTANCE = 34
+local SIDE_PITCH = math.rad(-9)
 
 local castParams = RaycastParams.new()
 castParams.FilterType = Enum.RaycastFilterType.Include
@@ -39,6 +44,14 @@ end
 
 function CameraController.yaw(): number
 	return yaw
+end
+
+function CameraController.mode(): string
+	return mode
+end
+
+function CameraController.setMode(newMode: string)
+	mode = newMode
 end
 
 -- Turn the camera to look along a horizontal direction.
@@ -81,6 +94,12 @@ end
 
 function CameraController.init()
 	refreshFilter()
+	Input.on("view", function()
+		mode = if mode == "side" then "orbit" else "side"
+		if CameraController.onModeChanged then
+			CameraController.onModeChanged(mode)
+		end
+	end)
 	Net.event("CameraShake").OnClientEvent:Connect(CameraController.shake)
 
 	RunService:BindToRenderStep("VesperdeepCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
@@ -103,7 +122,12 @@ function CameraController.init()
 		end
 
 		local look = Input.consumeLook()
-		if not State.uiOpen() then
+		if mode == "side" then
+			-- Side-on: the camera looks across the cave at the far wall, the path runs left-right.
+			local diff = (0 - yaw + math.pi) % (2 * math.pi) - math.pi
+			yaw += diff * math.min(1, dt * 5)
+			pitch += (SIDE_PITCH - pitch) * math.min(1, dt * 5)
+		elseif not State.uiOpen() then
 			yaw -= look.X * MOUSE_SENS
 			pitch -= look.Y * MOUSE_SENS
 			local stick = Input.lookStick
@@ -115,7 +139,7 @@ function CameraController.init()
 
 		-- Lock-on: steer toward keeping the target in front, slightly to the side.
 		local target = State.lockTarget
-		if target and target.Parent then
+		if target and target.Parent and mode ~= "side" then
 			local to = target.Position - root.Position
 			local wantYaw = math.atan2(-to.X, -to.Z)
 			local diff = (wantYaw - yaw + math.pi) % (2 * math.pi) - math.pi
@@ -126,7 +150,7 @@ function CameraController.init()
 		end
 		pitch = math.clamp(pitch, math.rad(-65), math.rad(45))
 
-		local wantDistance = if State.bossFight then ARENA_DISTANCE else DISTANCE
+		local wantDistance = if mode == "side" then SIDE_DISTANCE elseif State.bossFight then ARENA_DISTANCE else DISTANCE
 		distance += (wantDistance - distance) * math.min(1, dt * 2)
 
 		local wantFocus = root.Position + Vector3.new(0, 2.6, 0)
@@ -151,9 +175,10 @@ function CameraController.init()
 		else
 			cinematic = nil
 			local orbit = CFrame.new(focus) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
-			local desired = (orbit * CFrame.new(SHOULDER, 0, distance)).Position
+			local shoulder = if mode == "side" then 0 else SHOULDER
+			local desired = (orbit * CFrame.new(shoulder, 0, distance)).Position
 			local eye = collide(focus, desired)
-			cf = CFrame.lookAt(eye, (orbit * CFrame.new(SHOULDER, 0, 0)).Position)
+			cf = CFrame.lookAt(eye, (orbit * CFrame.new(shoulder, 0, 0)).Position)
 		end
 
 		if shakeAmount > 0.01 then

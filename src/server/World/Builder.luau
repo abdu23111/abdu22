@@ -13,6 +13,7 @@ local Grid = require(Shared.Grid)
 local Charms = require(Shared.Charms)
 local Dialogue = require(Shared.Dialogue)
 local Props = require(script.Parent.Props)
+local CaveArt = require(script.Parent.CaveArt)
 
 local T = Config.TILE
 local WALL = Config.WALL_THICKNESS
@@ -108,19 +109,12 @@ end
 local function buildTerrain(zoneIndex: number, chars, w: number, h: number, theme, folder: Folder)
 	local ox = Grid.originX(zoneIndex)
 	local height = h * T
-	local rng = Random.new(zoneIndex * 4099)
 	-- Winding side walls, one slab per column.
 	for c = 1, w do
 		local hz = Grid.halfWidth(zoneIndex, c)
 		local x = ox + (c - 0.5) * T
 		for _, side in { -1, 1 } do
 			terrain:FillBlock(CFrame.new(x, height / 2, side * (hz + WALL / 2)), Vector3.new(T, height + 8, WALL), theme.wall)
-		end
-		-- Boulders and outcrops pushing out of the walls give the caves their shape.
-		if rng:NextNumber() < 0.45 then
-			local side = if rng:NextNumber() < 0.5 then -1 else 1
-			local radius = rng:NextNumber(3, 6.5)
-			terrain:FillBall(Vector3.new(x + rng:NextNumber(-2, 2), rng:NextNumber(0, height), side * (hz + radius * 0.55)), radius, theme.wall)
 		end
 	end
 	-- Solid tiles, extruded across the corridor and into the walls.
@@ -299,6 +293,8 @@ end
 
 function Builder.build(): { ZoneInfo }
 	local world = make("Folder", { Name = "World", Parent = workspace })
+	-- Animated grass blades on grassy terrain.
+	terrain.Decoration = true
 	local doorsFolder = make("Folder", { Name = "Doors", Parent = world })
 	local infos: { ZoneInfo } = {}
 
@@ -326,7 +322,6 @@ function Builder.build(): { ZoneInfo }
 		local info: ZoneInfo = { index = zoneIndex, id = zone.id, folder = folder, enemies = {}, boss = nil, benches = {} }
 		local interact = make("Folder", { Name = "Interact", Parent = folder })
 		local items = make("Folder", { Name = "Items", Parent = folder })
-		local decor = make("Folder", { Name = "Decor", Parent = folder })
 		local rng = Random.new(zoneIndex * 733)
 
 		local gates = {}
@@ -337,7 +332,6 @@ function Builder.build(): { ZoneInfo }
 			table.insert(gates, Props.gate(center, size, theme, folder))
 		end
 
-		local floorSpots = {}
 		for r = 1, h do
 			for c = 1, w do
 				local ch = chars[r][c]
@@ -346,13 +340,10 @@ function Builder.build(): { ZoneInfo }
 				local hz = Grid.halfWidth(zoneIndex, c)
 				-- NPCs and benches stand toward the back wall, facing into the corridor.
 				local backZ = -math.min(hz - 5, 8)
-				if ch == "." and r < h and isSolid(chars[r + 1][c]) and r > 1 and chars[r - 1][c] == "." then
-					table.insert(floorSpots, { position = floorPos, half = hz })
-				end
-				if r > 1 and r < h and isSolid(chars[r - 1][c]) and chars[r][c] == "." and rng:NextNumber() < 0.35 then
-					Props.hanging(theme, pos + Vector3.new(rng:NextNumber(-1.5, 1.5), T / 2, rng:NextNumber(-hz + 2, hz - 2)), rng, decor)
-				end
-				if ch == "S" then
+				if ch == "o" then
+					local anchors = folder:FindFirstChild("SwingAnchors") or make("Folder", { Name = "SwingAnchors", Parent = folder })
+					Props.swingAnchor(pos, scanVertical(zoneIndex, chars, c, r, -1), theme, anchors)
+				elseif ch == "S" then
 					world:SetAttribute("StartPosition", floorPos + Vector3.new(0, 3, 0))
 					world:SetAttribute("StartBench", zone.id .. ":start")
 					info.benches[zone.id .. ":start"] = CFrame.new(floorPos + Vector3.new(0, 3, 0))
@@ -404,23 +395,8 @@ function Builder.build(): { ZoneInfo }
 			end
 		end
 
-		-- Props along the walls: pillars, crystals, shelves, fungi... and glowing lights.
-		local lastX = -math.huge
-		for i, spot in floorSpots do
-			if rng:NextNumber() < 0.5 then
-				local side = if i % 2 == 0 then -1 else 1
-				local z = side * (spot.half - rng:NextNumber(1.5, 4))
-				Props.wallDecor(theme, spot.position + Vector3.new(rng:NextNumber(-1.5, 1.5), 0, z), side, rng, decor)
-			end
-			if rng:NextNumber() < 0.3 then
-				Props.edgeTuft(theme, spot.position + Vector3.new(rng:NextNumber(-1.5, 1.5), 0, rng:NextNumber(-spot.half + 2, spot.half - 2)), rng, decor)
-			end
-			if spot.position.X - lastX > 22 and rng:NextNumber() < 0.55 then
-				lastX = spot.position.X
-				local side = if rng:NextNumber() < 0.5 then -1 else 1
-				Props.glowLight(theme, spot.position + Vector3.new(0, 0, side * (spot.half - 3)), rng, decor, i % 3 == 0)
-			end
-		end
+		-- Set dressing: rocks, ledges, props, lights, arches, bridges, signs and vistas.
+		CaveArt.dress(zoneIndex, chars, w, h, theme, folder)
 
 		Props.ambience(zoneIndex, theme, folder)
 		Props.lightShafts(zoneIndex, chars, theme, folder)

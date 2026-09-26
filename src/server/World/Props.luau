@@ -903,6 +903,61 @@ function Props.wallDecor(theme, floor: Vector3, side: number, rng: Random, paren
 	end
 end
 
+-- A Silkline ring: a glowing hoop hanging on a chain, the anchor players swing from.
+function Props.swingAnchor(pos: Vector3, ceilingY: number, theme, parent: Instance)
+	local glow = theme.accent:Lerp(Color3.new(1, 1, 1), 0.45)
+	local anchor = make("Part", {
+		Name = "SwingAnchor",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.one * 1.2,
+		Position = pos,
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Color = glow,
+		Material = Enum.Material.Neon,
+		Parent = parent,
+	})
+	-- The hoop, facing along the corridor so it reads from the side and from behind.
+	local radius = 1.9
+	for i = 0, 11 do
+		local a = i / 12 * math.pi * 2
+		part("Part", {
+			Size = Vector3.new(0.3, 0.32, radius * 0.56),
+			CFrame = CFrame.new(pos) * CFrame.Angles(0, math.pi / 2, 0) * CFrame.Angles(0, 0, a) * CFrame.new(0, radius, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			Color = glow,
+			Material = Enum.Material.Neon,
+			Parent = parent,
+		})
+	end
+	-- Chain up into the dark.
+	local top = math.min(ceilingY, pos.Y + 60)
+	if top > pos.Y + radius then
+		part("Part", {
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(top - pos.Y - radius, 0.22, 0.22),
+			CFrame = CFrame.new(pos + Vector3.new(0, (top - pos.Y + radius) / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+			Color = Color3.fromRGB(70, 70, 80),
+			Material = Enum.Material.Metal,
+			Parent = parent,
+		})
+	end
+	make("PointLight", { Range = 20, Brightness = 1.4, Color = glow, Parent = anchor })
+	make("ParticleEmitter", {
+		Texture = SPARKLE,
+		Color = ColorSequence.new(glow),
+		LightEmission = 1,
+		Size = NumberSequence.new(0.3, 0),
+		Lifetime = NumberRange.new(1, 2),
+		Rate = 6,
+		Speed = NumberRange.new(0.5, 1.5),
+		SpreadAngle = Vector2.new(180, 180),
+		Parent = anchor,
+	})
+	return anchor
+end
+
 -- A light source at the base of a wall; a few cast real shadows.
 function Props.glowLight(theme, floor: Vector3, rng: Random, parent: Instance, shadows: boolean)
 	local light = glowProp(theme.decor, floor, theme, rng, parent)

@@ -89,6 +89,7 @@ def ruins():
     f(137, 139, 17, 26); f(144, 150, 6, 29); f(137, 149, 1, 2)
     f(140, 149, 3, 5, "."); f(140, 143, 3, 29, "."); f(150, 150, 3, 5, "2")
     f(144, 149, 14, 16, "."); f(150, 150, 14, 16, "5")                  # side passage to the Archive
+    f(144, 149, 27, 29, "."); f(150, 150, 27, 29, "8")                  # low passage to the Glowmire
     p(141, 29, "$")
     return m
 
@@ -183,6 +184,50 @@ def archive():
     f(104, 107, 31, 31); f(114, 116, 31, 31)
     f(118, 119, 10, 35); f(124, 139, 8, 9); p(130, 7, "O")
     f(140, 140, 5, 7, "7")
+    f(140, 140, 33, 35, "9")                                            # east door to the Glowmire
+    return m
+
+
+def glowmire():
+    """A vast open cavern of giant mushrooms between the Ruins and the Archive.
+
+    Rises between stepping platforms stay within 2 tiles (a single jump clears ~2.3), gaps
+    within 4 (jump + dash clears ~6). Swing anchors (o) offer faster, higher lines and are the
+    only way to the lake's heart island; the cathedral pillar is climbed with Thorn Claws.
+    """
+    m = Map(240, 56)
+    f, p = m.fill, m.put
+    # West entry hall.
+    f(1, 28, 50, 56); f(1, 28, 1, 30); f(1, 1, 47, 49, "8")
+    p(6, 49, "B"); p(12, 49, "L"); p(20, 49, "c")
+    # Mushroom terraces: a stair of caps up to a long canopy bridge with a Geo cache.
+    f(29, 60, 50, 56)
+    p(40, 49, "c"); p(52, 49, "s"); p(45, 30, "f")
+    f(32, 35, 48, 48); f(38, 41, 46, 46); f(44, 47, 44, 44); f(50, 53, 42, 42); f(56, 59, 40, 40); f(62, 66, 38, 38)
+    f(67, 90, 38, 38); p(78, 37, "$"); p(86, 37, "c")
+    # Thorn gully with stepping caps, and anchors for swinging over it.
+    f(61, 72, 54, 56); f(61, 72, 53, 53, "^"); f(65, 67, 48, 48)
+    p(63, 41, "o"); p(70, 41, "o")
+    f(73, 90, 50, 56); p(80, 49, "h")
+    # The Mirror Lake: a long pool of ink crossed on mushroom caps; anchors high above.
+    f(91, 160, 53, 56); f(91, 160, 52, 52, "~")
+    for c1, row in [(94, 48), (100, 46), (106, 48), (112, 46), (118, 48), (124, 46), (130, 48), (136, 46), (142, 48), (148, 46), (154, 48)]:
+        f(c1, c1 + 3, row, row)
+    p(103, 38, "f"); p(127, 40, "w"); p(145, 38, "f")
+    for c, r in [(100, 36), (110, 34), (121, 34), (132, 36), (143, 34), (153, 36)]:
+        p(c, r, "o")
+    # The heart island, reachable only by letting go of a swing at the right moment.
+    f(114, 124, 40, 40); p(119, 39, "H")
+    # The Spore Cathedral: a tall chamber whose pillar can be climbed to a hidden alcove.
+    f(161, 210, 50, 56)
+    p(168, 49, "g"); p(185, 40, "f"); p(198, 36, "w"); p(204, 49, "s")
+    f(176, 179, 46, 46); f(181, 184, 44, 44)
+    f(190, 192, 14, 49)
+    f(193, 206, 12, 12); p(198, 11, "M"); p(203, 11, "$")
+    p(178, 30, "o"); p(186, 24, "o")
+    # East hall and the way on to the Archive.
+    f(211, 240, 50, 56); f(211, 240, 1, 28)
+    p(218, 49, "B"); p(228, 49, "$"); f(240, 240, 47, 49, "9")
     return m
 
 
@@ -277,6 +322,12 @@ META = [
         "O": '{ kind = "memory", id = "lanterns_truth" }',
         "K": '{ kind = "boss", id = "echo", arena = { 60, 110 } }',
     }, (7, 5)),
+    ("glowmire", "The Glowmire", "Where the light pools", "glowmire", "glowmire", glowmire, {
+        "L": '{ kind = "npc", id = "tablet_glowmire", tablet = true }',
+        "H": '{ kind = "heart" }',
+        "M": '{ kind = "memory", id = "mire_bloom" }',
+        "$": '{ kind = "geo", amount = 90 }',
+    }, (3.6, 6.2), 1.9),
 ]
 
 HEADER = '''--!strict
@@ -290,6 +341,7 @@ HEADER = '''--!strict
 --   =  sealed gate, opened for good by hitting a lever (!) or a Lumen sigil (?) in the same zone
 --   S  first spawn     B  bench (checkpoint)     G  boss gate (closes during a fight)
 --   1-9 doorway: leads to the doorway with the same digit in another zone
+--   o  swing anchor: a glowing ring to swing from (Silkline)
 --   Enemies: c husk mite, f gloom gnat, s spore bulb, g shellguard,
 --            m crystal mite, h hollow hopper, w ink wisp
 --   Any other letter is looked up in the zone's `specials` table.
@@ -297,6 +349,7 @@ HEADER = '''--!strict
 export type Special = { kind: string, id: string?, amount: number?, tablet: boolean?, arena: { number }? }
 export type Zone = {
 	id: string,
+	wide: number?, -- corridor width multiplier (the Glowmire is a vast open cavern)
 	name: string,
 	subtitle: string,
 	theme: string,
@@ -312,10 +365,12 @@ local Zones: { Zone } = {'''
 def main():
     out = [HEADER]
     shown = []
-    for zid, name, sub, theme, music, fn, specials, pos in META:
+    for entry in META:
+        zid, name, sub, theme, music, fn, specials, pos = entry[:8]
+        wide = entry[8] if len(entry) > 8 else None
         rows = fn().rows()
         assert len({len(r) for r in rows}) == 1, zid
-        used = set("".join(rows)) - set("#%^~XY=!?.SBGT123456789cfsgmhw")
+        used = set("".join(rows)) - set("#%^~XY=!?.SBGT123456789cfsgmhwo")
         missing = used - set(specials)
         assert not missing, (zid, missing)
         shown.append((zid, rows))
@@ -326,6 +381,8 @@ def main():
         out.append(f'\t\ttheme = "{theme}",')
         out.append(f'\t\tmusic = "{music}",')
         out.append(f"\t\tmapPosition = Vector2.new({pos[0]}, {pos[1]}),")
+        if wide:
+            out.append(f"\t\twide = {wide},")
         out.append("\t\tspecials = {")
         for k, v in specials.items():
             key = f'["{k}"]' if not k.isalpha() else k

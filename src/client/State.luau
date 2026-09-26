@@ -11,11 +11,12 @@ local State = {
 	cameraYaw = 0,
 	lockTarget = nil :: BasePart?,
 	-- Animation hints written by Movement / combat and read by the character animator.
-	action = nil :: string?, -- "dash" | "dodge" | "wall" | "heal" | "charge" | nil
+	action = nil :: string?, -- "dash" | "dodge" | "wall" | "heal" | "swing" | nil
 	moveSpeed = 0,
 	facingVector = Vector3.xAxis,
 	talkingTo = nil :: string?,
 	charging = false,
+	swingAnchor = nil :: Vector3?, -- the ring the Silkline is hooked to
 	invulnUntil = 0,
 	dead = false,
 	-- Movement is paused while any of these reasons is active (dialogue, transitions, death...).

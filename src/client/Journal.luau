@@ -398,7 +398,7 @@ function Journal.init()
 	mapCanvas = new("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.52),
-		Size = UDim2.fromOffset(1240, 460),
+		Size = UDim2.fromOffset(1240, 540),
 		BackgroundTransparency = 1,
 		Parent = pages.map,
 	})
@@ -413,7 +413,7 @@ function Journal.init()
 	}, { new("UICorner", { CornerRadius = UDim.new(1, 0) }), new("UIStroke", { Color = Color3.fromRGB(255, 200, 120), Thickness = 2 }) })
 	local function fit()
 		local size = pages.map.AbsoluteSize
-		scale.Scale = math.max(0.3, math.min(size.X / 1260, size.Y / 480))
+		scale.Scale = math.max(0.3, math.min(size.X / 1260, size.Y / 560))
 	end
 	pages.map:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
 	fit()

@@ -397,6 +397,29 @@ def drowned_archive():
     tr.render("archive", 4.2, 0.55)
 
 
+def glowmire_theme():
+    """The Glowmire: slow, wide and luminous. Lydian harp and choir over a deep pad, with
+    bell-like droplets. D lydian, 64 bpm."""
+    rng = np.random.default_rng(71)
+    prog = [("D3", "maj7"), ("E3", "maj"), ("B2", "min"), ("D3", "maj7"),
+            ("G2", "maj7"), ("E3", "maj"), ("F#2", "min"), ("A2", "sus")] * 2
+    tr = Track(64, 4 * len(prog))
+    chords = [chord(r, q) for r, q in prog]
+    for i, ch in enumerate(chords):
+        tr.add(pad([hz(m) for m in ch] + [hz(ch[0] + 19)], 4.4, 0.32, bright=1800, vibrato=0.3), i * 4)
+        tr.add(choir([hz(m + 12) for m in ch[:3]], 4.3, 0.18), i * 4)
+        for j, m in enumerate([ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[0] + 24, ch[2] + 12, ch[1] + 12]):
+            tr.add(harp(hz(m), 1.4, 0.24), i * 4 + j * 0.66)
+        # Droplets: sparse high bells.
+        if rng.random() < 0.7:
+            tr.add(music_box(hz(ch[int(rng.integers(0, 3))] + 36), 1.2, 0.16), i * 4 + float(rng.choice([0.5, 1.5, 2.5, 3.25])))
+    lydian = [0, 2, 4, 6, 7, 9, 11]
+    scale = scale_notes("D", lydian, midi("A4"), midi("A5"))
+    for pos, m, length in melody_line(rng, scale, chords[8:], 4, midi("F#5"), [[3, 1], [4], [2, 1, 1], [-2, 2]]):
+        tr.add(harp(hz(m), length + 0.8, 0.42), 32 + pos)
+    tr.render("glowmire", 4.5, 0.55)
+
+
 def hollowroot():
     """The quiet below: a low drone, distant single notes, a lot of silence. E minor, 48 bpm."""
     rng = np.random.default_rng(71)
@@ -548,6 +571,9 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["extra"]:
         extra_effects()
         sys.exit()
+    if sys.argv[1:] == ["glowmire"]:
+        glowmire_theme()
+        sys.exit()
     ashen_burrows()
     mothlight_ruins()
     verdant_hush()
@@ -558,4 +584,5 @@ if __name__ == "__main__":
     drowned_archive()
     hollowroot()
     final_boss()
+    glowmire_theme()
     sound_effects()

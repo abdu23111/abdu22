@@ -594,6 +594,36 @@ function CombatClient.init()
 		Fx.ring(root.Position - Vector3.new(0, 2.4, 0), Color3.fromRGB(245, 240, 225), 3, 0.3, 0.5)
 	end
 
+	-- The Silkline: a glowing thread from the Wanderer's raised hand to the ring.
+	local thread: BasePart? = nil
+	local threadConn: RBXScriptConnection? = nil
+	Movement.onSwing = function(anchor: Vector3?)
+		if thread then
+			thread:Destroy()
+			thread = nil
+		end
+		if threadConn then
+			threadConn:Disconnect()
+			threadConn = nil
+		end
+		local root = State.root
+		if not anchor or not root then
+			return
+		end
+		Fx.glitter(anchor, Color3.fromRGB(200, 240, 255), 14, 1.5)
+		local t = Fx.part({ Size = Vector3.new(0.12, 0.12, 1), Color = Color3.fromRGB(215, 240, 255), Transparency = 0.1 })
+		thread = t
+		threadConn = RunService.RenderStepped:Connect(function()
+			if not root.Parent or not t.Parent then
+				return
+			end
+			local hand = root.Position + Vector3.new(0, 3.4, 0) + State.facingVector * 0.4
+			local len = (anchor - hand).Magnitude
+			t.Size = Vector3.new(0.12, 0.12, len)
+			t.CFrame = CFrame.lookAt((hand + anchor) / 2, anchor)
+		end)
+	end
+
 	Movement.onHurt = function()
 		local root = State.root
 		if root then

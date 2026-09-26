@@ -8,6 +8,7 @@ local Input = {
 	jumpHeld = false,
 	focusHeld = false,
 	attackHeld = false,
+	swingHeld = false,
 	stick = Vector2.zero, -- gamepad left stick
 	lookStick = Vector2.zero, -- gamepad right stick
 	touchMove = Vector2.zero,
@@ -69,6 +70,8 @@ local DODGE = { [Enum.KeyCode.Q] = true, [Enum.KeyCode.C] = true, [Enum.KeyCode.
 local BOLT = { [Enum.KeyCode.R] = true, [Enum.KeyCode.ButtonR2] = true }
 local MAP = { [Enum.KeyCode.M] = true, [Enum.KeyCode.ButtonSelect] = true }
 local LOCK = { [Enum.KeyCode.T] = true, [Enum.KeyCode.ButtonR3] = true }
+local SWING = { [Enum.KeyCode.G] = true, [Enum.KeyCode.ButtonL3] = true, [Enum.KeyCode.DPadUp] = true }
+local VIEW = { [Enum.KeyCode.V] = true, [Enum.KeyCode.DPadDown] = true }
 
 local function press(key: Enum.KeyCode, down: boolean)
 	Input.keys[key] = down or nil
@@ -91,6 +94,11 @@ local function press(key: Enum.KeyCode, down: boolean)
 		fire("map")
 	elseif LOCK[key] and down then
 		fire("lock")
+	elseif SWING[key] then
+		Input.swingHeld = down
+		fire(if down then "swing" else "swingRelease")
+	elseif VIEW[key] and down then
+		fire("view")
 	elseif key == Enum.KeyCode.Tab and down then
 		fire("charms")
 	elseif key == Enum.KeyCode.H and down then
@@ -153,7 +161,7 @@ end)
 -- Clear held keys when the window loses focus so the character doesn't run away.
 UserInputService.WindowFocusReleased:Connect(function()
 	table.clear(Input.keys)
-	Input.jumpHeld, Input.focusHeld, Input.attackHeld = false, false, false
+	Input.jumpHeld, Input.focusHeld, Input.attackHeld, Input.swingHeld = false, false, false, false
 end)
 
 -- ===== Touch: a floating joystick on the left, camera drag on the right, action buttons =====
@@ -294,6 +302,16 @@ if UserInputService.TouchEnabled then
 	end)
 	touchButton(gui, "LOCK", UDim2.new(1, -60, 0.45, 0), 52, function()
 		fire("lock")
+	end)
+	touchButton(gui, "SWING", UDim2.new(1, -150, 0.45, 0), 60, function()
+		Input.swingHeld = true
+		fire("swing")
+	end, function()
+		Input.swingHeld = false
+		fire("swingRelease")
+	end)
+	touchButton(gui, "VIEW", UDim2.new(1, -60, 0, 120), 46, function()
+		fire("view")
 	end)
 	touchButton(gui, "MAP", UDim2.new(1, -60, 0, 60), 50, function()
 		fire("map")

@@ -118,6 +118,15 @@ local Memories: { [string]: Memory } = {
 			"When you kindle the lamp, give it this: that they tried. The kingdom can afford to remember that.",
 		},
 	},
+	mire_bloom = {
+		title = "The Mire in Bloom",
+		order = 14,
+		lines = {
+			"Before the Hush, pilgrims came to the Glowmire to watch the caps open, all at once, every hundred years.",
+			"They brought no memories for the lamp here. The mushrooms kept their own light, and asked for nothing.",
+			"Some of the pilgrims never went home. They said it was the only light in the kingdom that didn't cost anything.",
+		},
+	},
 }
 
 return Memories
