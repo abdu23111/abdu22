@@ -386,6 +386,99 @@ def wanderer(name="wanderer", cloak=(34, 98, 116), cloak_dark=(22, 64, 80), mask
         "antF": loop_keys(0.4, (-20,), (-14,)),
         "antB": loop_keys(0.4, (-18,), (-12,)),
     })
+    # ---- Transitions and variations -------------------------------------------------
+    # Idle variation: glances toward the viewer, then back over the shoulder, antennae perking.
+    r.clip("idleLook", 3.2, {
+        "head": [K(0, 0), K(0.45, -4, 0, 0, 1, 1, "io", -38), K(1.3, -2, 0, 0, 1, 1, "io", -38),
+                 K(1.75, 6, 0, 0, 1, 1, "io", 24), K(2.5, 6, 0, 0, 1, 1, "io", 24), K(3.2, 0)],
+        "antF": [K(0, 0), K(0.4, -14), K(0.65, 5), K(1.75, -10), K(2.0, 4), K(3.2, 0)],
+        "antB": [K(0, 0), K(0.45, -12), K(0.7, 4), K(1.8, -9), K(2.05, 3), K(3.2, 0)],
+        "body": [K(0, 0), K(0.45, 0, 0.03), K(1.75, -2, -0.03), K(3.2, 0)],
+        "armF": [K(0, 0), K(1.75, -6), K(3.2, 0)],
+        "hem": [K(0, 0), K(1.75, 4), K(3.2, 0)],
+    }, loop=False)
+    # Starting to run: a quick crouch and lean before the first stride.
+    r.clip("runStart", 0.18, {
+        "hips": [K(0, 0, 0, 0, 1, 1), K(0.08, 0, 0, -0.2, 1.08, 0.92), K(0.18, 0, 0, 0)],
+        "body": [K(0, 0), K(0.08, -22, 0.12), K(0.18, -11, 0.05)],
+        "legF": [K(0, 0), K(0.08, -35), K(0.18, 38)],
+        "legB": [K(0, 0), K(0.08, 30), K(0.18, -42)],
+        "hem": [K(0, 0), K(0.18, 18)],
+        "antF": [K(0, 0), K(0.18, 26)],
+        "antB": [K(0, 0), K(0.18, 28)],
+        "armF": [K(0, 0), K(0.18, -25)],
+    }, loop=False)
+    # Stopping: a braced skid, the cloak and antennae swinging on past, then settling.
+    r.clip("runStop", 0.32, {
+        "hips": [K(0, 0, 0, 0), K(0.08, 0, 0, -0.15, 1.06, 0.94, "o"), K(0.32, 0)],
+        "body": [K(0, -10, 0.05), K(0.08, 14, -0.1, -0.05, 1.05, 0.95, "o"), K(0.32, 0)],
+        "legF": [K(0, 38), K(0.08, -40), K(0.32, 0)],
+        "legB": [K(0, -30), K(0.08, -18), K(0.32, 0)],
+        "hem": [K(0, 20), K(0.1, -26), K(0.32, 0)],
+        "head": [K(0, 4), K(0.08, -8), K(0.32, 0)],
+        "antF": [K(0, 28), K(0.1, -18), K(0.32, 0)],
+        "antB": [K(0, 30), K(0.12, -16), K(0.32, 0)],
+        "armF": [K(0, 10), K(0.1, -20), K(0.32, 0)],
+    }, loop=False)
+    # The top of a jump: legs tucked, the blade held out, the cloak floating.
+    r.clip("apex", 0.5, {
+        "legF": loop_keys(0.5, (45,), (48,)),
+        "legB": loop_keys(0.5, (30,), (34,)),
+        "hips": loop_keys(0.5, (0, 0, 0.05), (0, 0, 0.07)),
+        "body": loop_keys(0.5, (-4,), (-5,)),
+        "hem": loop_keys(0.5, (-14,), (-18,)),
+        "armF": loop_keys(0.5, (40,), (44,)),
+        "armB": loop_keys(0.5, (-30,), (-34,)),
+        "antF": loop_keys(0.5, (10,), (14,)),
+        "antB": loop_keys(0.5, (12,), (16,)),
+    })
+    # Pressing against a wall: leaning in, hands on the stone, feet shuffling.
+    r.clip("push", 0.9, {
+        "body": loop_keys(0.9, (-18, 0.15), (-20, 0.17)),
+        "armF": loop_keys(0.9, (80,), (86,)),
+        "armB": loop_keys(0.9, (70,), (76,)),
+        "legF": loop_keys(0.9, (-20,), (-8,)),
+        "legB": loop_keys(0.9, (25,), (35,)),
+        "head": loop_keys(0.9, (6,), (4,)),
+        "hem": loop_keys(0.9, (10,), (14,)),
+        "nail": loop_keys(0.9, (-30,), (-30,)),
+    })
+    # Kicking off a wall.
+    r.clip("wallJump", 0.26, {
+        "body": [K(0, 10, -0.1), K(0.06, -18, 0.15, 0, 0.94, 1.08, "o"), K(0.26, 0)],
+        "legF": [K(0, 50), K(0.06, -30), K(0.26, 0)],
+        "legB": [K(0, 40), K(0.06, -45), K(0.26, 0)],
+        "armB": [K(0, -60), K(0.08, 60), K(0.26, 0)],
+        "hem": [K(0, 0), K(0.08, 30), K(0.26, 0)],
+        "antF": [K(0, -20), K(0.1, 30), K(0.26, 0)],
+        "antB": [K(0, -18), K(0.1, 32), K(0.26, 0)],
+    }, loop=False)
+    # ---- The combo ---------------------------------------------------------------------
+    # Second strike: a rising backhand from low behind to high in front.
+    r.clip("attackSide2", 0.32, {
+        "armF": [K(0, 0), K(0.05, -70, 0, 0, 1, 1, "i"), K(0.1, 150, 0, 0, 1, 1, "o"), K(0.32, 0)],
+        "nail": [K(0, 0), K(0.05, -20), K(0.1, -50), K(0.32, 0)],
+        "body": [K(0, 0), K(0.05, -12, 0.08, -0.08, 1.04, 0.96), K(0.1, 12, 0.18, 0.08, 0.96, 1.06, "o"), K(0.32, 0)],
+        "head": [K(0, 0), K(0.05, -6), K(0.1, 10), K(0.32, 0)],
+        "hem": [K(0, 0), K(0.1, -18), K(0.32, 0)],
+        "armB": [K(0, 0), K(0.1, -50), K(0.32, 0)],
+        "legF": [K(0, 0), K(0.05, 20), K(0.32, 0)],
+        "legB": [K(0, 0), K(0.05, -20), K(0.32, 0)],
+    }, loop=False, events=[[0.08, "swing"]])
+    # Finisher: coil high, step in and bring the blade down in one heavy chop.
+    r.clip("attackFinish", 0.55, {
+        "armF": [K(0, 0), K(0.12, 200, 0, 0, 1, 1, "i"), K(0.18, 45, 0, 0, 1, 1, "o"), K(0.55, 0)],
+        "nail": [K(0, 0), K(0.12, -50), K(0.18, -45), K(0.55, 0)],
+        "body": [K(0, 0), K(0.12, 18, -0.15, 0.1, 0.95, 1.08), K(0.18, -28, 0.5, -0.15, 1.14, 0.88, "o"), K(0.4, -12, 0.2, -0.05), K(0.55, 0)],
+        "hips": [K(0, 0, 0, 0), K(0.12, 0, -0.1, 0.1), K(0.18, 0, 0.35, -0.25, 1.1, 0.9, "o"), K(0.55, 0)],
+        "legF": [K(0, 0), K(0.12, -20), K(0.18, 50), K(0.55, 0)],
+        "legB": [K(0, 0), K(0.12, 20), K(0.18, -45), K(0.55, 0)],
+        "head": [K(0, 0), K(0.12, 10), K(0.18, -16), K(0.55, 0)],
+        "hem": [K(0, 0), K(0.12, -20), K(0.2, 34), K(0.55, 0)],
+        "armB": [K(0, 0), K(0.12, -80), K(0.18, 70), K(0.55, 0)],
+        "antF": [K(0, 0), K(0.12, 20), K(0.18, -30), K(0.55, 0)],
+        "antB": [K(0, 0), K(0.12, 22), K(0.18, -32), K(0.55, 0)],
+    }, loop=False, events=[[0.17, "swing"], [0.2, "thud"]])
     # Swinging on the Silkline: one arm up holding the thread, legs and cloak trailing.
     r.clip("swing", 0.8, {
         "armF": loop_keys(0.8, (165,), (172,)),

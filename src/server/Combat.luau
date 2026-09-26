@@ -95,7 +95,7 @@ function Combat.init(infos, PlayerService)
 				local target, handler = Damageable.find(part)
 				if target and handler and not struck[target] then
 					struck[target] = true
-					if handler.onHit(player, damage, knock) then
+					if handler.onHit(player, damage, knock, kind) then
 						soul = true
 					end
 				end
@@ -113,7 +113,7 @@ function Combat.init(infos, PlayerService)
 		return damage
 	end
 
-	Net.event("Attack").OnServerEvent:Connect(function(player: Player, direction: unknown, aim: unknown)
+	Net.event("Attack").OnServerEvent:Connect(function(player: Player, direction: unknown, aim: unknown, stage: unknown)
 		if direction ~= "side" and direction ~= "up" and direction ~= "down" and direction ~= "cleave" then
 			return
 		end
@@ -141,13 +141,18 @@ function Combat.init(infos, PlayerService)
 			end
 		end
 		local reach = if PlayerService.hasCharm(player, "long_reach") then 1.35 else 1
+		-- Side swings chain into a three-hit combo; the third is a heavier, longer finisher.
+		local comboStage = if direction == "side" and (stage == 2 or stage == 3) then stage :: number else 1
+		if comboStage == 3 then
+			reach *= 1.25
+		end
 		local boxCFrame, size = Hitbox.nail(swingFrame, direction :: string, reach)
 		-- A little extra room to forgive network latency.
 		size += Vector3.new(1.5, 1.5, 1.5)
 		local character = player.Character
 		if character then
 			-- Lets every client animate this player's swing.
-			character:SetAttribute("Swing", direction)
+			character:SetAttribute("Swing", if comboStage == 2 then "side2" elseif comboStage == 3 then "finish" else direction)
 			character:SetAttribute("SwingAt", now)
 		end
 
@@ -156,11 +161,29 @@ function Combat.init(infos, PlayerService)
 		if direction == "cleave" then
 			damage = math.floor(damage * Config.CLEAVE_MULT + 0.5)
 			kind = "cleave"
+		elseif comboStage == 3 then
+			damage = math.floor(damage * 1.6 + 0.5)
+			kind = "finish"
 		end
 		local knock = if direction == "up" then Vector3.new(0, 1, 0) elseif direction == "down" then Vector3.new(0, -1, 0) else look
-		local parts = workspace:GetPartBoundsInBox(boxCFrame, size, params)
-		if strike(player, parts, damage, knock, kind, {}) then
-			PlayerService.addSoul(player, Config.SOUL_PER_HIT)
+		local function resolve()
+			local parts = workspace:GetPartBoundsInBox(boxCFrame, size, params)
+			if strike(player, parts, damage, knock, kind, {}) then
+				PlayerService.addSoul(player, Config.SOUL_PER_HIT)
+			end
+		end
+		if comboStage == 3 then
+			-- The finisher lands on its contact frame, after the wind-up (matching the client).
+			task.delay(0.12, function()
+				local r = PlayerService.rootOf(player)
+				if r and (player:GetAttribute("Masks") or 0) > 0 then
+					boxCFrame, size = Hitbox.nail(CFrame.lookAt(r.Position, r.Position + look), "side", reach)
+					size += Vector3.new(1.5, 1.5, 1.5)
+					resolve()
+				end
+			end)
+		else
+			resolve()
 		end
 	end)
 

@@ -21,6 +21,8 @@ type Entry = {
 	facing: Vector3,
 	noticed: boolean,
 	mode: string,
+	glance: Vector3?,
+	nextGlance: number,
 }
 
 local entries: { [BasePart]: Entry } = {}
@@ -64,6 +66,8 @@ local function build(anchor: BasePart)
 		facing = rest,
 		noticed = false,
 		mode = "idle",
+		glance = nil,
+		nextGlance = os.clock() + math.random() * 4,
 	}
 	entries[anchor] = entry
 	rig.onEvent = function(name: string)
@@ -158,7 +162,18 @@ function NPCs.init()
 				entry.facing = blended.Unit
 			end
 
-			rig.lookTarget = if root and distance < LOOK_RADIUS then root.Position + Vector3.new(0, 1.5, 0) else nil
+			if root and distance < LOOK_RADIUS then
+				rig.lookTarget = root.Position + Vector3.new(0, 1.5, 0)
+			else
+				-- Alone, they look about: a spot to one side, then the other, then straight ahead.
+				local now = os.clock()
+				if now >= entry.nextGlance then
+					entry.nextGlance = now + 2.5 + math.random() * 3.5
+					local r = math.random()
+					entry.glance = if r < 0.35 then nil else entry.feet + Vector3.new((math.random() - 0.5) * 24, 2 + math.random() * 4, 6)
+				end
+				rig.lookTarget = entry.glance
+			end
 			rig:update(dt, Rig.frame(entry.feet, entry.facing))
 		end
 	end)

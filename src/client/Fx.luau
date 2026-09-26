@@ -5,7 +5,21 @@
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+
 local Fx = {}
+local SIDE_VIEW = Config.SIDE_VIEW
+local FRONT = Config.FRONT_DEPTH
+
+-- Budget: how many effect parts may exist at once. Decorative extras (glitter, debris, ambient
+-- flourishes) are skipped while the budget is spent; gameplay-critical effects never are.
+local MAX_ACTIVE = 260
+local active = 0
+
+function Fx.busy(): boolean
+	return active > MAX_ACTIVE
+end
 
 local folder = Instance.new("Folder")
 folder.Name = "LocalFx"
@@ -35,6 +49,10 @@ function Fx.part(props: { [string]: any }): Part
 		mesh.Parent = p
 	end
 	p.Parent = folder
+	active += 1
+	p.Destroying:Connect(function()
+		active -= 1
+	end)
 	return p
 end
 
@@ -70,6 +88,9 @@ end
 function Fx.sparks(at: Vector3, color: Color3?, count: number?, length: number?, dir: Vector3?)
 	for _ = 1, count or 6 do
 		local d = randomUnit()
+		if SIDE_VIEW then
+			d = Vector3.new(d.X, d.Y, d.Z * 0.25).Unit
+		end
 		if dir then
 			d = (d * 0.8 + dir.Unit).Unit
 		end
@@ -86,6 +107,21 @@ end
 
 -- A flat ring of dust or light spreading across the floor.
 function Fx.ring(at: Vector3, color: Color3, radius: number, duration: number?, transparency: number?)
+	if SIDE_VIEW then
+		-- From the side a floor ring is invisible, so it's a glowing band hugging the ground
+		-- that spreads outward.
+		local h = math.clamp(radius * 0.22, 0.4, 2.2)
+		local band = Fx.part({
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.new(radius * 0.4, h, 0.3),
+			Position = Vector3.new(at.X, at.Y + h * 0.3, 1),
+			Color = color,
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = transparency or 0.45,
+		})
+		Fx.fade(band, duration or 0.45, { Size = Vector3.new(radius * 2.2, h * 0.5, 0.3) })
+		return
+	end
 	local p = Fx.part({
 		Shape = Enum.PartType.Cylinder,
 		Size = Vector3.new(0.2, radius * 0.4, radius * 0.4),
@@ -116,8 +152,9 @@ end
 function Fx.impact(at: Vector3, dir: Vector3, color: Color3?, heavy: boolean?)
 	local c = color or WHITE
 	local s = if heavy then 1.7 else 1
-	local star = Fx.part({ Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2 * s, Position = at, Color = WHITE })
-	Fx.fade(star, 0.12, { Size = Vector3.one * 3.4 * s })
+	-- Small and brief: the flash marks the contact without hiding who was hit.
+	local star = Fx.part({ Shape = Enum.PartType.Ball, Size = Vector3.one * 0.7 * s, Position = at, Color = WHITE, Transparency = 0.2 })
+	Fx.fade(star, 0.1, { Size = Vector3.one * 2.2 * s })
 	local d = if dir.Magnitude > 1e-3 then dir.Unit else Vector3.xAxis
 	local side = d:Cross(Vector3.yAxis)
 	if side.Magnitude < 1e-3 then
@@ -177,6 +214,160 @@ function Fx.slash(cf: CFrame, radius: number, heavy: boolean?, color: Color3?, f
 			end
 			place()
 		end)
+	end
+end
+
+-- ===== Side-view slash arcs =====
+
+export type ArcStyle = {
+	color: Color3,
+	thickness: number,
+	glow: Color3?, -- a wider, fainter outer layer
+	sweep: number?, -- seconds for the leading edge to travel the arc
+	life: number?, -- how long each segment lingers
+	segments: number?,
+}
+
+-- A crescent of blade-light drawn in the play plane, swept from angle `a0` to `a1` (degrees,
+-- 0 = straight ahead, 90 = up) around `center`, mirrored for `facing` (+1 right, -1 left). It
+-- appears progressively like the blade drawing it, is thickest in the middle, brightest at the
+-- leading edge, and rides along with `follow` so it stays on the swing.
+function Fx.arc(center: Vector3, facing: number, radius: number, a0: number, a1: number, style: ArcStyle, follow: BasePart?)
+	local n = style.segments or 12
+	local sweep = style.sweep or 0.06
+	local life = style.life or 0.16
+	local items = {}
+	local origin = if follow then follow.Position else center
+	for i = 0, n - 1 do
+		local f = i / (n - 1)
+		local deg = a0 + (a1 - a0) * f
+		local a = math.rad(if facing < 0 then 180 - deg else deg)
+		local taper = math.sin(f * math.pi) ^ 0.7
+		local segLen = radius * math.rad(math.abs(a1 - a0)) / n * 1.35
+		for layer = 1, if style.glow then 2 else 1 do
+			local outer = layer == 2
+			local r = radius + (if outer then style.thickness * 0.6 else 0)
+			local p = Fx.part({
+				Size = Vector3.new(segLen, math.max(0.08, style.thickness * taper * (if outer then 1.8 else 1)), 0.15),
+				Color = if outer then style.glow :: Color3 else style.color,
+				Transparency = if outer then 0.84 else 0.25 + (1 - f) * 0.45,
+			})
+			local offset = Vector3.new(math.cos(a) * r, math.sin(a) * r, if outer then 0.9 else 1.1)
+			p.CFrame = CFrame.new(center + offset) * CFrame.Angles(0, 0, a + math.pi / 2)
+			table.insert(items, { part = p, offset = offset, angle = a })
+			-- Appears as the blade passes, then fades.
+			p.LocalTransparencyModifier = 1
+			task.delay(sweep * f, function()
+				if p.Parent then
+					p.LocalTransparencyModifier = 0
+					Fx.fade(p, life, { Size = Vector3.new(segLen * 0.6, p.Size.Y * 0.3, 0.15) })
+				end
+			end)
+		end
+	end
+	if follow then
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			if not follow.Parent or not items[1].part.Parent then
+				conn:Disconnect()
+				return
+			end
+			local shift = follow.Position - origin
+			for _, it in items do
+				if it.part.Parent then
+					it.part.CFrame = CFrame.new(center + shift + it.offset) * CFrame.Angles(0, 0, it.angle + math.pi / 2)
+				end
+			end
+		end)
+	end
+end
+
+-- A heavy blow meeting the ground: a flash along the floor, dust rolling out both ways and
+-- a few stones kicked up.
+function Fx.groundBurst(at: Vector3, color: Color3, width: number)
+	Fx.ring(at, color, width, 0.5, 0.35)
+	for _, s in { -1, 1 } do
+		local puff = Fx.part({
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.new(2.2, 1.4, 1.4),
+			Position = at + Vector3.new(s * 0.5, 0.7, 1.5),
+			Color = Color3.fromRGB(170, 160, 150),
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.45,
+		})
+		Fx.fade(puff, 0.5, { Size = Vector3.new(4.5, 2.6, 2), Position = puff.Position + Vector3.new(s * width * 0.6, 0.6, 0) })
+	end
+	if Fx.busy() then
+		return
+	end
+	for _ = 1, 5 do
+		local stone = Fx.part({
+			Size = Vector3.one * (0.25 + math.random() * 0.35),
+			CFrame = CFrame.new(at + Vector3.new((math.random() - 0.5) * width * 0.6, 0.3, 1.2)) * CFrame.Angles(math.random() * 6, math.random() * 6, 0),
+			Color = Color3.fromRGB(120, 112, 108),
+			Material = Enum.Material.Slate,
+		})
+		local up = stone.CFrame + Vector3.new((math.random() - 0.5) * 3, 1.5 + math.random() * 2.5, 0)
+		TweenService:Create(stone, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = up }):Play()
+		task.delay(0.2, function()
+			if stone.Parent then
+				Fx.fade(stone, 0.3, { CFrame = up - Vector3.new(0, 2.5, 0) }, Enum.EasingStyle.Quad)
+			end
+		end)
+	end
+end
+
+-- Glowing fissures split down the cut face of the ground from a point on the floor.
+function Fx.crack(at: Vector3, color: Color3, length: number?)
+	local z = if SIDE_VIEW then FRONT + 2.4 else at.Z
+	for _, dir in { -1, 1 } do
+		local p = Vector3.new(at.X, at.Y - 0.2, z)
+		local a = math.rad(-90 + dir * (25 + math.random() * 20))
+		for _ = 1, 4 do
+			local len = (length or 4) * (0.4 + math.random() * 0.4)
+			local q = p + Vector3.new(math.cos(a), math.sin(a), 0) * len
+			local seg = Fx.part({ Size = Vector3.new(0.22, 0.22, len), CFrame = CFrame.lookAt((p + q) / 2, q), Color = color, Transparency = 0.05 })
+			Fx.fade(seg, 1.2, nil, Enum.EasingStyle.Sine)
+			p = q
+			a += math.rad((math.random() - 0.5) * 60)
+		end
+	end
+	Fx.light(at, color, 14, 2, 0.5)
+end
+
+-- Loose rock shaken from the ceiling by a quake, falling around `at`.
+function Fx.debris(at: Vector3, width: number, color: Color3?, count: number?)
+	if Fx.busy() then
+		return
+	end
+	for i = 1, count or 6 do
+		task.delay(i * 0.05 + math.random() * 0.25, function()
+			local s = 0.4 + math.random() * 0.8
+			local start = at + Vector3.new((math.random() - 0.5) * width, 22 + math.random() * 8, (math.random() - 0.5) * 2)
+			local rock = Fx.part({
+				Size = Vector3.new(s, s * 0.8, s),
+				CFrame = CFrame.new(start) * CFrame.Angles(math.random() * 6, math.random() * 6, 0),
+				Color = color or Color3.fromRGB(110, 102, 100),
+				Material = Enum.Material.Slate,
+			})
+			local fall = 0.45 + math.random() * 0.2
+			TweenService:Create(rock, TweenInfo.new(fall, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = CFrame.new(start.X, at.Y + s * 0.4, start.Z) * CFrame.Angles(math.random() * 6, 0, math.random() * 6) }):Play()
+			task.delay(fall, function()
+				if rock.Parent then
+					Fx.puff(Vector3.new(start.X, at.Y + 0.3, start.Z), Color3.fromRGB(160, 150, 140), 1.2, 0.3)
+					Fx.fade(rock, 0.4)
+				end
+			end)
+		end)
+	end
+end
+
+-- A small "!" flare above a creature that has just spotted you.
+function Fx.alert(at: Vector3, color: Color3)
+	local bar = Fx.part({ Size = Vector3.new(0.35, 1.1, 0.2), Position = at + Vector3.new(0, 0.7, 1), Color = color })
+	local dot = Fx.part({ Shape = Enum.PartType.Ball, Size = Vector3.one * 0.4, Position = at + Vector3.new(0, -0.15, 1), Color = color })
+	for _, p in { bar, dot } do
+		Fx.fade(p, 0.6, { Position = p.Position + Vector3.new(0, 0.8, 0) }, Enum.EasingStyle.Sine)
 	end
 end
 
@@ -257,6 +448,9 @@ end
 
 -- A burst of sparkles that lingers a moment (casts, pickups, ability flourishes).
 function Fx.glitter(at: Vector3, color: Color3, amount: number?, spread: number?)
+	if Fx.busy() then
+		return
+	end
 	local holder = Fx.part({ Size = Vector3.one * (spread or 2), Position = at, Transparency = 1 })
 	local e = Instance.new("ParticleEmitter")
 	e.Texture = SPARKLE

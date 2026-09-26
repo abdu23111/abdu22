@@ -857,6 +857,37 @@ def recolor(r, old, new):
             p["c"] = list(new)
 
 
+def enemy_reactions(r):
+    """Noticing, turning, recovering, staggering and being defeated, for every small enemy.
+    Built on whichever core bones the rig has, so each creature's own shape carries it."""
+    names = {b["n"] for b in r.bones}
+    body = "body" if "body" in names else ("pod" if "pod" in names else "root")
+    head = "head" if "head" in names else body
+    flying = r.anchor == 0 and "stem" not in names
+    add = {}
+    add["notice"] = (0.5, {
+        "root": [K(0, 0, 0, 0), K(0.12, 0, 0, 0.5, 0.9, 1.12, "o"), K(0.25, 0, 0, 0, 1.1, 0.9), K(0.5, 0)],
+        head: [K(0, 0), K(0.12, -15), K(0.5, 0)],
+    }, [[0.1, "notice"]])
+    add["turn"] = (0.18, {"root": [K(0, 0, 0, 0, 1, 1), K(0.09, 0, 0, 0, 0.6, 1.05), K(0.18, 0, 0, 0, 1, 1)]}, [])
+    add["recover"] = (0.4, {body: [K(0, -8, 0, -0.05, 1.05, 0.95), K(0.4, 0)]}, [])
+    add["stagger"] = (0.6, {
+        body: [K(0, 0), K(0.08, 25, -0.3, 0.1, 0.9, 1.1, "o"), K(0.25, -12, 0.1), K(0.4, 8), K(0.6, 0)],
+        head: [K(0, 0), K(0.08, 30), K(0.3, -10), K(0.6, 0)],
+    }, [])
+    if flying:
+        add["death"] = (0.55, {"root": [K(0, 0, 0, 0), K(0.1, 40, 0, 0.4, 1.1, 0.9, "o"), K(0.55, 220, 0, -1.4, 0.7, 0.7, "i")]}, [])
+    else:
+        add["death"] = (0.55, {
+            body: [K(0, 0), K(0.1, 20, -0.2, 0.2, 0.9, 1.1, "o"), K(0.55, 70, -0.3, -0.4, 1.2, 0.6, "i")],
+            head: [K(0, 0), K(0.55, 50)],
+        }, [])
+    for name, (length, keys, events) in add.items():
+        if name not in r.clips:
+            keys = {k: v for k, v in keys.items() if k in names}
+            r.clip(name, length, keys, loop=False, events=events)
+
+
 def enrich(r):
     """A second pass that gives every enemy a stronger colour identity and a few details:
     glowing markings, plates, stripes, crests. Shapes and bones are untouched."""
@@ -920,4 +951,8 @@ def all_rigs():
         mite(), mite("crystal_mite", (70, 54, 92), crystals=True), gnat(), wisp(), bulb(), shellguard(), hopper(),
         gravelmaw(), vantis(), widow(), asterion(), quartzelle(), murrow(), echo(),
     ]
+    small = {"mite", "crystal_mite", "gnat", "wisp", "bulb", "shellguard", "hopper"}
+    for r in rigs:
+        if r.name in small:
+            enemy_reactions(r)
     return [enrich(r) for r in rigs]

@@ -264,6 +264,49 @@ def rig_parts(name, clip_name, t, pos, facing, scale=1.0):
     return out
 
 
+def arc_parts(center, facing, radius, a0, a1, color, glow, thickness, segments=12):
+    """The same geometry as client/Fx.arc, fully drawn (the in-game arc sweeps in over ~0.06s)."""
+    out = []
+    n = segments
+    for i in range(n):
+        f = i / (n - 1)
+        deg = a0 + (a1 - a0) * f
+        a = math.radians(180 - deg if facing < 0 else deg)
+        taper = math.sin(f * math.pi) ** 0.7
+        seg = radius * math.radians(abs(a1 - a0)) / n * 1.35
+        for outer in ((False, True) if glow else (False,)):
+            r = radius + (thickness * 0.6 if outer else 0)
+            pos = [center[0] + math.cos(a) * r, center[1] + math.sin(a) * r, 0.9 if outer else 1.1]
+            rot = preview.rot_z(a + math.pi / 2)
+            out.append({"k": "part", "c": "Part", "sh": "Block", "mesh": "", "m": "Neon",
+                        "t": 0.84 if outer else 0.25 + (1 - f) * 0.45,
+                        "col": [c / 255 for c in (glow if outer else color)],
+                        "s": [seg, max(0.08, thickness * taper * (1.8 if outer else 1)), 0.15],
+                        "cf": pos + list(rot.reshape(-1))})
+    return out
+
+
+def impact_parts(at, color=(255, 255, 255), heavy=False):
+    s = 1.7 if heavy else 1
+    out = [{"k": "part", "c": "Part", "sh": "Ball", "mesh": "", "m": "Neon", "t": 0.35, "col": [1, 1, 1],
+            "s": [1.3 * s] * 3, "cf": list(at) + [1, 0, 0, 0, 1, 0, 0, 0, 1]}]
+    rng = np.random.default_rng(3)
+    for _ in range(10 if heavy else 7):
+        d = rng.normal(size=3)
+        d[2] *= 0.25
+        d /= np.linalg.norm(d)
+        length = (2.2 if heavy else 1.5) * rng.uniform(0.6, 1.3)
+        p = np.array(at) + d * (1.2 + length / 2)
+        z = d
+        x = np.cross([0, 1, 0], z)
+        x = x / (np.linalg.norm(x) + 1e-9)
+        y = np.cross(z, x)
+        R = np.column_stack([x, y, z])
+        out.append({"k": "part", "c": "Part", "sh": "Block", "mesh": "", "m": "Neon", "t": 0.0,
+                    "col": [c / 255 for c in color], "s": [0.14, 0.14, length], "cf": list(p) + list(R.reshape(-1))})
+    return out
+
+
 def characters(scene, zone, x0, x1, player_at=None, player_facing=(1, 0, 0), player_clip="idle"):
     parts = []
     lights = []
@@ -287,7 +330,8 @@ def characters(scene, zone, x0, x1, player_at=None, player_facing=(1, 0, 0), pla
         if b["z"] == zone and inside(b["p"]):
             parts += rig_parts(b["id"], "idle", 0.5, [b["p"][0], b["floor"], b["p"][2]], (-1, 0, 0.2))
     if player_at is not None:
-        parts += rig_parts("wanderer", player_clip, 0.4, player_at, player_facing, PLAYER_SCALE)
+        clip_name, clip_t = (player_clip if isinstance(player_clip, tuple) else (player_clip, 0.4))
+        parts += rig_parts("wanderer", clip_name, clip_t, player_at, player_facing, PLAYER_SCALE)
         lights.append({"p": [player_at[0], player_at[1] + 2, player_at[2]], "col": [1, 0.84, 0.63], "r": 22, "b": 1.1, "on": True})
     return parts, lights
 
@@ -313,12 +357,14 @@ def orbit_camera(focus, yaw_deg, pitch_deg, dist, shoulder=1.4):
     return eye.tolist(), target.tolist()
 
 
-def make_shot(scene, name, zone, x0, x1, eye, target, player_at=None, player_facing=(1, 0, 0), clip="idle", cut_z=None, fov=70, exposure=1.0):
+def make_shot(scene, name, zone, x0, x1, eye, target, player_at=None, player_facing=(1, 0, 0), clip="idle", cut_z=None, fov=70, exposure=1.0, extra=None):
     theme = scene["themes"][zone]
     parts = [p for p in scene["parts"] if x0 - 30 <= p["cf"][0] <= x1 + 30 and float(p["t"]) < 0.99]
     lights = [l for l in scene["lights"] if x0 - 30 <= l["p"][0] <= x1 + 30 and l["on"]]
     pes = [p for p in scene["pe"] if x0 - 30 <= p["p"][0] <= x1 + 30]
     char_parts, char_lights = characters(scene, zone, x0, x1, player_at, player_facing, clip)
+    if extra:
+        char_parts += extra
     terrain = terrain_mesh(scene, x0, x1)
     if cut_z is None:
         eye = collide_camera(target, eye)
@@ -392,6 +438,44 @@ def default_shots(scene):
     return shots
 
 
+COMBAT = [
+    # (name, zone id, hero clip, clip time, arc (a0, a1, radius, lift, color, glow, thickness, segs), enemy (rig, clip, t), heavy)
+    ("combat_slash1", "forest", "attackSide", 0.1, (75, -35, 5.6, 0.6, (240, 246, 255), (160, 200, 255), 0.5, 12), ("mite", "hurt", 0.05), False),
+    ("combat_slash2", "mines", "attackSide2", 0.1, (-80, 60, 5.4, 0.4, (215, 240, 255), (120, 230, 240), 0.45, 12), ("crystal_mite", "hurt", 0.05), False),
+    ("combat_finisher", "ruins", "attackFinish", 0.19, (120, -50, 7.2, 0.8, (255, 244, 214), (255, 196, 110), 0.85, 16), ("shellguard", "stagger", 0.08), True),
+    ("combat_upslash", "glowmire", "attackUp", 0.1, (20, 160, 4.6, 1.2, (240, 246, 255), (170, 210, 255), 0.45, 12), ("gnat", "hurt", 0.05), False),
+]
+
+
+def combat_shots(scene):
+    shots = []
+    for name, zid, clip, t, arc, enemy, heavy in COMBAT:
+        zi = zone_by_id(scene, zid)
+        # Stand on the first long floor strip near an NPC or bench of the region.
+        anchor = next((p for p in scene["parts"] if p["z"] == zi and p["n"] == "NPCAnchor"), None)
+        x = (anchor["cf"][0] + 14) if anchor else scene["zones"][zi]["min"][0] + 60
+        y = floor_under(scene, x, 0, (anchor["cf"][1] + 3) if anchor else 200)
+        feet = [x, y, 0]
+        root = [x, y + 3, 0]
+        a0, a1, radius, lift, color, glow, thick, segs = arc
+        center = [root[0], root[1] + lift, 0]
+        extra = arc_parts(center, 1, radius, a0, a1, color, glow, thick, segs)
+        rig, eclip, et = enemy
+        if rig == "gnat":
+            epos = [x + 1.5, y + 3 + 5.0, 0]
+            contact = [x + 1.2, y + 3 + 3.8, 1.2]
+        else:
+            epos = [x + 5.5, y, 0]
+            contact = [x + 4.2, y + 3.4, 1.2]
+        extra += rig_parts(rig, eclip, et, epos, (-1, 0, 0))
+        extra += impact_parts(contact, (255, 220, 150) if heavy else (255, 255, 255), heavy)
+        focus = [x + 3, y + 5, 0]
+        eye = [focus[0], focus[1] + 1.2, 30]
+        shots.append(dict(name=name, zone=zi, x0=x - 60, x1=x + 60, eye=eye, target=focus, player_at=feet,
+                          player_facing=(1, 0, 0), clip=(clip, t), fov=40, extra=extra))
+    return shots
+
+
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -408,7 +492,7 @@ def main():
     scene = load_scene()
     os.makedirs(os.path.join(WEB, "shots"), exist_ok=True)
     os.makedirs(SHOTS_DIR, exist_ok=True)
-    shots = default_shots(scene)
+    shots = default_shots(scene) + combat_shots(scene)
     only = sys.argv[1:]
     if only:
         shots = [s for s in shots if any(s["name"].startswith(o) for o in only)]

@@ -111,8 +111,15 @@ local function beam(a: Vector3, b: Vector3, w: number, h: number, color: Color3,
 	return block(CFrame.lookAt((a + b) / 2, b), Vector3.new(w, h, len), color, material, collide)
 end
 
-local function light(host: BasePart, color: Color3, range: number, brightness: number, shadows: boolean?)
+-- `kind`: "flame" lights flicker, "glow" lights (crystals, fungus) pulse slowly; clients
+-- animate both (see client/Ambient).
+local function light(host: BasePart, color: Color3, range: number, brightness: number, shadows: boolean?, kind: string?)
 	local l = Instance.new("PointLight")
+	if kind == "flame" then
+		l:SetAttribute("Flicker", true)
+	elseif kind == "glow" then
+		l:SetAttribute("Pulse", true)
+	end
 	l.Color = color
 	l.Range = range
 	l.Brightness = brightness
@@ -178,7 +185,7 @@ local function candle(pos: Vector3, h: number?, withLight: boolean?)
 	rod(pos, pos + Vector3.new(0, height, 0), 0.35, Color3.fromRGB(236, 228, 206))
 	local flame = ellipsoid(CFrame.new(pos + Vector3.new(0, height + 0.25, 0)), Vector3.new(0.25, 0.5, 0.25), Color3.fromRGB(255, 200, 120), Enum.Material.Neon)
 	if withLight then
-		light(flame, Color3.fromRGB(255, 190, 120), 14, 0.9)
+		light(flame, Color3.fromRGB(255, 190, 120), 14, 0.9, false, "flame")
 	end
 end
 
@@ -196,10 +203,13 @@ local function crystalCluster(base: Vector3, normal: Vector3, scale: number, col
 		block(cf, Vector3.new(w, len, w), c, Enum.Material.Glass).Transparency = 0.2
 		local core = block(cf, Vector3.new(w * 0.45, len * 0.85, w * 0.45), c:Lerp(WHITE, 0.35), Enum.Material.Neon)
 		core.Transparency = 0.15
+		if i <= 2 then
+			core:SetAttribute("Pulse", true)
+		end
 		brightest = brightest or core
 	end
 	if withLight and brightest then
-		light(brightest, color, 18 * math.max(1, scale * 0.8), 1.4)
+		light(brightest, color, 18 * math.max(1, scale * 0.8), 1.4, false, "glow")
 		motes(brightest, color:Lerp(WHITE, 0.4), 1.5)
 	end
 end
@@ -217,13 +227,14 @@ local function mushroom(floor: Vector3, height: number, capColor: Color3, glowCo
 	local cap = ellipsoid(CFrame.new(top + Vector3.new(0, capH * 0.25, 0)), Vector3.new(capD, capH, capD), vary(capColor, 0.05), Enum.Material.SmoothPlastic)
 	local gills = ellipsoid(CFrame.new(top - Vector3.new(0, capH * 0.05, 0)), Vector3.new(capD * 0.9, capH * 0.35, capD * 0.9), glowColor, Enum.Material.Neon)
 	gills.Transparency = 0.1
+	gills:SetAttribute("Pulse", true)
 	for _ = 1, math.clamp(math.floor(capD), 2, 6) do
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(0.1, 0.36) * capD
 		ball(cap.Position + Vector3.new(math.cos(a) * r, capH * 0.38 - r * 0.25, math.sin(a) * r), math.max(0.25, capD * 0.07), glowColor:Lerp(WHITE, 0.5), Enum.Material.Neon)
 	end
 	if withLight then
-		light(gills, glowColor, math.clamp(height * 3.2, 14, 40), 1.5)
+		light(gills, glowColor, math.clamp(height * 3.2, 14, 40), 1.5, false, "glow")
 		motes(gills, glowColor:Lerp(WHITE, 0.4), 1.2)
 	end
 end
@@ -284,7 +295,7 @@ local function hangingLantern(top: Vector3, at: Vector3, glowColor: Color3, fram
 	for _, o in { Vector3.new(0.5, 0, 0.5), Vector3.new(-0.5, 0, 0.5), Vector3.new(0.5, 0, -0.5), Vector3.new(-0.5, 0, -0.5) } do
 		rod(at + o - Vector3.new(0, 0.7, 0), at + o + Vector3.new(0, 0.7, 0), 0.1, metal, Enum.Material.Metal)
 	end
-	light(core, glowColor, range or 26, 1.6)
+	light(core, glowColor, range or 26, 1.6, false, "flame")
 	motes(core, glowColor:Lerp(WHITE, 0.5), 1.2, 0.15)
 end
 
@@ -300,7 +311,7 @@ local function lampPost(floor: Vector3, side: number, glowColor: Color3, style: 
 		globe.Transparency = 0.35
 		local core = ball(globe.Position, 0.9, glowColor, Enum.Material.Neon)
 		ball(globe.Position + Vector3.new(0, 0.9, 0), 0.5, gold, Enum.Material.Metal)
-		light(core, glowColor, 28, 1.7)
+		light(core, glowColor, 28, 1.7, false, "flame")
 	else
 		local wood = vary(theme.wood, 0.05)
 		rod(floor, floor + Vector3.new(0, h, 0), 0.55, wood, Enum.Material.Wood, true)
@@ -415,7 +426,7 @@ local function brazier(floor: Vector3, glowColor: Color3)
 	rod(floor + Vector3.new(0, 2.3, 0), floor + Vector3.new(0, 3, 0), 2.2, gold, Enum.Material.Metal, true)
 	local fire = ellipsoid(CFrame.new(floor + Vector3.new(0, 3.5, 0)), Vector3.new(1.3, 1.6, 1.3), glowColor, Enum.Material.Neon)
 	ellipsoid(CFrame.new(floor + Vector3.new(0, 3.9, 0)), Vector3.new(0.7, 1.2, 0.7), glowColor:Lerp(WHITE, 0.6), Enum.Material.Neon)
-	light(fire, glowColor, 30, 1.8)
+	light(fire, glowColor, 30, 1.8, false, "flame")
 	local e = Instance.new("ParticleEmitter")
 	e.Texture = SPARKLE
 	e.Color = ColorSequence.new(glowColor)
@@ -510,10 +521,11 @@ local function glowShelf(center: Vector3, side: number, color: Color3, withLight
 		local w = rng:NextNumber(1.6, 2.8)
 		ellipsoid(CFrame.new(p + Vector3.new(0, 0.15, -side * w * 0.3)), Vector3.new(w, w * 0.28, w * 0.9), vary(theme.flora:Lerp(color, 0.25), 0.05), Enum.Material.SmoothPlastic)
 		local g = ellipsoid(CFrame.new(p + Vector3.new(0, 0, -side * w * 0.3)), Vector3.new(w * 0.88, w * 0.12, w * 0.8), color, Enum.Material.Neon)
+		g:SetAttribute("Pulse", true)
 		first = first or g
 	end
 	if withLight and first then
-		light(first, color, 20, 1.3)
+		light(first, color, 20, 1.3, false, "glow")
 	end
 end
 
@@ -524,7 +536,7 @@ local function sconce(center: Vector3, side: number, color: Color3)
 	beam(center + Vector3.new(0, 0.2, -side * 0.3), cup, 0.25, 0.25, metal, Enum.Material.Metal)
 	rod(cup - Vector3.new(0, 0.2, 0), cup + Vector3.new(0, 0.2, 0), 0.9, metal, Enum.Material.Metal)
 	local flame = ellipsoid(CFrame.new(cup + Vector3.new(0, 0.6, 0)), Vector3.new(0.6, 1, 0.6), color, Enum.Material.Neon)
-	light(flame, color, 24, 1.5)
+	light(flame, color, 24, 1.5, false, "flame")
 end
 
 -- A carved stone tablet set into the wall, with a gilded border and a faint glowing glyph.
@@ -548,6 +560,14 @@ end
 
 -- A rope/root/vine hanging from `top`, swaying slightly.
 local function strand(top: Vector3, length: number, d: number, color: Color3, material: Enum.Material, leafColor: Color3?, bulbColor: Color3?)
+	-- Grouped so clients can sway it gently from its top (see client/Ambient).
+	local model = Instance.new("Model")
+	model.Name = "Strand"
+	model:SetAttribute("Sway", math.clamp(6 / length, 0.03, 0.12))
+	model.WorldPivot = CFrame.new(top)
+	model.Parent = parent
+	local outer = parent
+	parent = model
 	local p = top
 	local segs = math.clamp(math.floor(length / 2.5), 2, 5)
 	for i = 1, segs do
@@ -559,8 +579,9 @@ local function strand(top: Vector3, length: number, d: number, color: Color3, ma
 		p = q
 	end
 	if bulbColor then
-		ball(p, math.max(0.45, d * 1.6), bulbColor, Enum.Material.Neon)
+		ball(p, math.max(0.45, d * 1.6), bulbColor, Enum.Material.Neon):SetAttribute("Pulse", true)
 	end
+	parent = outer
 end
 
 local function timberFrame(x: number, floorY: number, height: number, hz: number, withLantern: boolean, glowColor: Color3, collide: boolean)
@@ -776,6 +797,25 @@ local function vistaLights(center: Vector3, side: number, z0: number, far: numbe
 		light(holder, pick(theme.glow), 70, 0.7)
 	end
 end
+
+-- Water gathering on the ceiling and dripping, in the damper regions.
+local function drip(at: Vector3)
+	local holder = block(CFrame.new(at), Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(170, 220, 240), Enum.Material.Glass)
+	holder.Transparency = 0.35
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = SPARKLE
+	e.Color = ColorSequence.new(Color3.fromRGB(190, 235, 255))
+	e.LightEmission = 0.5
+	e.Size = NumberSequence.new(0.16)
+	e.Lifetime = NumberRange.new(0.8, 1.1)
+	e.Rate = 0.7
+	e.Speed = NumberRange.new(0, 0.5)
+	e.Acceleration = Vector3.new(0, -70, 0)
+	e.EmissionDirection = Enum.NormalId.Bottom
+	e.Parent = holder
+end
+
+local WET = { forest = true, library = true, glowmire = true, caves = true, crystal = true }
 
 local STYLES: { [string]: Style } = {}
 
@@ -1690,6 +1730,8 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 						if rng:NextNumber() < 0.2 then
 							local hzz = if SIDE_VIEW then rng:NextNumber(-hz + 1.5, -1.5) else rng:NextNumber(-hz + 1.5, hz - 1.5)
 							style.hang(Vector3.new(x + rng:NextNumber(-1.8, 1.8), ceilY + 0.5, hzz), maxLen)
+						elseif WET[theme.decor] and rng:NextNumber() < 0.05 then
+							drip(Vector3.new(x + rng:NextNumber(-1.8, 1.8), ceilY - 0.2, rng:NextNumber(-6, -1.5)))
 						end
 					end
 				end

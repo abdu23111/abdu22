@@ -214,22 +214,33 @@ local function strikeDirection(root: BasePart): string
 end
 
 local CLIPS = { side = "attackSide", up = "attackUp", down = "attackDown", cleave = "cleave" }
+local COMBO_CLIPS = { "attackSide", "attackSide2", "attackFinish" }
 
--- The blade arc, swept in the plane of the swing and carried along with the player.
-local function slashArc(root: BasePart, direction: string, look: Vector3, reach: number)
-	local heavy = direction == "cleave"
-	local side = look:Cross(Vector3.yAxis)
-	local pivot = root.Position + Vector3.new(0, 0.6, 0)
-	local cf
-	if direction == "up" then
-		cf = CFrame.lookAt(pivot, pivot + Vector3.yAxis, side)
-	elseif direction == "down" then
-		cf = CFrame.lookAt(pivot - Vector3.new(0, 1, 0), pivot - Vector3.new(0, 2, 0), side)
-	else
-		-- A slightly diagonal sweep reads better than a flat one.
-		cf = CFrame.lookAt(pivot, pivot + look) * CFrame.Angles(0, 0, math.rad(if heavy then -12 else -24))
-	end
-	Fx.slash(cf, (if heavy then 6 else 3.8) * reach, heavy, if heavy then CLEAVE_COLOR else NAIL_COLOR, root)
+-- The combo: strike again within the window to chain into the next stage. Presses a moment
+-- before the next swing is ready are buffered so chaining feels smooth, not fussy.
+local COMBO_WINDOW = 0.55
+local BUFFER = 0.2
+local comboStage = 0
+local comboUntil = 0
+local nextAttackAt = 0
+local queuedAt: number? = nil
+
+-- Every attack's arc: where it sweeps (degrees, 0 = ahead, 90 = up), how big, and its look.
+-- Radii and angles are chosen to lie over that attack's real hitbox (Shared/Hitbox).
+type ArcSpec = { a0: number, a1: number, radius: number, lift: number, style: any }
+local ARCS: { [string]: ArcSpec } = {
+	side1 = { a0 = 75, a1 = -35, radius = 5.6, lift = 0.6, style = { color = Color3.fromRGB(240, 246, 255), glow = Color3.fromRGB(160, 200, 255), thickness = 0.5, sweep = 0.05, life = 0.15 } },
+	side2 = { a0 = -80, a1 = 60, radius = 5.4, lift = 0.4, style = { color = Color3.fromRGB(215, 240, 255), glow = Color3.fromRGB(120, 230, 240), thickness = 0.45, sweep = 0.05, life = 0.15 } },
+	finish = { a0 = 120, a1 = -50, radius = 7.2, lift = 0.8, style = { color = Color3.fromRGB(255, 244, 214), glow = Color3.fromRGB(255, 196, 110), thickness = 0.85, sweep = 0.07, life = 0.24, segments = 16 } },
+	up = { a0 = 20, a1 = 160, radius = 4.6, lift = 1.2, style = { color = Color3.fromRGB(240, 246, 255), glow = Color3.fromRGB(170, 210, 255), thickness = 0.45, sweep = 0.05, life = 0.15 } },
+	down = { a0 = 200, a1 = 340, radius = 4.6, lift = -1.2, style = { color = Color3.fromRGB(240, 246, 255), glow = Color3.fromRGB(170, 210, 255), thickness = 0.45, sweep = 0.05, life = 0.15 } },
+	cleave = { a0 = 150, a1 = -55, radius = 9, lift = 0.6, style = { color = Color3.fromRGB(255, 225, 255), glow = Color3.fromRGB(230, 130, 255), thickness = 1.1, sweep = 0.08, life = 0.3, segments = 18 } },
+}
+
+local function slashArc(root: BasePart, key: string, facing: number, reach: number)
+	local spec = ARCS[key]
+	local center = root.Position + Vector3.new(0, spec.lift, 0)
+	Fx.arc(center, facing, spec.radius * reach, spec.a0, spec.a1, spec.style, root)
 end
 
 local function localHits(cf: CFrame, direction: string, reach: number): { BasePart }
@@ -243,56 +254,107 @@ local function swing(direction: string)
 	if not root then
 		return
 	end
+	local now = os.clock()
 	local reach = if State.hasCharm("long_reach") then 1.35 else 1
-	local heavy = direction == "cleave"
 	local look = aimDirection(root)
 	-- Turn into the swing now so the animation, arc and hitbox agree.
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + look)
 	State.facingVector = look
-	Net.event("Attack"):FireServer(direction, look)
-	Characters.action(CLIPS[direction])
-	Sfx.play(if heavy then "cleave" else "slash", if heavy then 0.8 else nil)
-	task.delay(0.04, function()
+	local facing = if look.X < 0 then -1 else 1
+
+	-- Which stage of the combo is this?
+	local stage = 1
+	if direction == "side" then
+		stage = if now <= comboUntil and comboStage < 3 then comboStage + 1 else 1
+		comboStage = stage
+		comboUntil = now + COMBO_WINDOW
+	else
+		comboStage = 0
+	end
+	local finisher = direction == "side" and stage == 3
+	local heavy = direction == "cleave" or finisher
+	local hitReach = if finisher then reach * 1.25 else reach
+	nextAttackAt = now + (if finisher then 0.5 elseif direction == "cleave" then 0.45 else Config.ATTACK_COOLDOWN)
+	if finisher then
+		comboStage = 0
+		comboUntil = 0
+		-- Commit to the finisher: a short step forward into the blow.
+		Movement.shove(look * 16, 0.1)
+	end
+
+	Net.event("Attack"):FireServer(direction, look, stage)
+	Characters.action(if direction == "side" then COMBO_CLIPS[stage] else CLIPS[direction])
+	if heavy then
+		Sfx.play("cleave", if finisher then 1.0 else 0.8)
+	else
+		Sfx.play("slash", ({ 1.0, 1.12, 1.0 })[stage] + (math.random() - 0.5) * 0.06)
+	end
+	local arcKey = if direction == "side" then (if stage == 2 then "side2" elseif stage == 3 then "finish" else "side1") else direction
+	-- The arc is drawn as the blade passes its contact frame.
+	task.delay(if finisher then 0.13 else 0.035, function()
 		if root.Parent then
-			slashArc(root, direction, look, reach)
+			slashArc(root, arcKey, facing, hitReach)
 		end
 	end)
-	if heavy then
+	if direction == "cleave" then
 		CameraController.shake(0.6)
 	end
 
-	local hits = localHits(CFrame.lookAt(root.Position, root.Position + look), direction, reach)
-	if #hits == 0 then
-		return
-	end
-	-- Impact frame: flash where the blade meets the nearest thing it struck, freeze for an
-	-- instant, shake, and throw soul toward the player from anything living.
-	local nearest, nearestD = hits[1], math.huge
-	local soulFrom = nil
-	for _, part in hits do
-		local d = (part.Position - root.Position).Magnitude
-		if d < nearestD then
-			nearest, nearestD = part, d
+	local hitDirection = if direction == "cleave" then "cleave" else direction
+	local function resolve()
+		if not root.Parent then
+			return
 		end
-		local model = part:FindFirstAncestorOfClass("Model")
-		if model and model.Parent and model.Parent.Name == "Enemies" then
-			soulFrom = part.Position
+		local hits = localHits(CFrame.lookAt(root.Position, root.Position + look), hitDirection, hitReach)
+		if finisher then
+			-- The chop meets the ground in front whether or not it hits anything.
+			local ground = root.Position + look * 5 - Vector3.new(0, 2.9, 0)
+			Fx.groundBurst(ground, Color3.fromRGB(255, 220, 160), 7)
+			CameraController.shake(0.45)
+		end
+		if #hits == 0 then
+			return
+		end
+		-- Impact frame: flash where the blade meets the nearest thing it struck, freeze for an
+		-- instant, shake, and throw soul toward the player from anything living.
+		local nearest, nearestD = hits[1], math.huge
+		local soulFrom = nil
+		for _, part in hits do
+			local d = (part.Position - root.Position).Magnitude
+			if d < nearestD then
+				nearest, nearestD = part, d
+			end
+			local model = part:FindFirstAncestorOfClass("Model")
+			if model and model.Parent and model.Parent.Name == "Enemies" then
+				soulFrom = part.Position
+			end
+		end
+		local contact = root.Position:Lerp(nearest.Position, 0.65) + Vector3.new(0, 0.5, 0)
+		if Config.SIDE_VIEW then
+			contact = Vector3.new(contact.X, contact.Y, 1.2)
+		end
+		local strikeDir = if direction == "up" then Vector3.yAxis elseif direction == "down" then -Vector3.yAxis else look
+		local color = if direction == "cleave" then CLEAVE_COLOR elseif finisher then Color3.fromRGB(255, 220, 150) else nil
+		Sfx.play(if heavy then "impact" else "hit", if stage == 2 then 1.1 else nil)
+		Fx.impact(contact, strikeDir, color, heavy)
+		Characters.hitStop(if heavy then 0.12 elseif stage == 2 then 0.065 else 0.055)
+		CameraController.shake(if heavy then 0.9 elseif stage == 2 then 0.35 else 0.28)
+		if soulFrom then
+			Fx.wisps(soulFrom, root, if heavy then 4 else 2)
+		end
+		if direction == "down" then
+			Movement.pogo()
+			Fx.ring(contact - Vector3.new(0, 0.5, 0), NAIL_COLOR, 4, 0.3, 0.4)
+		elseif direction == "side" then
+			-- Recoil off whatever was struck.
+			Movement.recoil(-1, if finisher then 20 else 14, if finisher then 0.1 else 0.07)
 		end
 	end
-	local contact = root.Position:Lerp(nearest.Position, 0.65) + Vector3.new(0, 0.5, 0)
-	local strikeDir = if direction == "up" then Vector3.yAxis elseif direction == "down" then -Vector3.yAxis else look
-	Sfx.play(if heavy then "impact" else "hit")
-	Fx.impact(contact, strikeDir, if heavy then CLEAVE_COLOR else nil, heavy)
-	Characters.hitStop(if heavy then 0.11 else 0.06)
-	CameraController.shake(if heavy then 0.9 else 0.3)
-	if soulFrom then
-		Fx.wisps(soulFrom, root, if heavy then 4 else 2)
-	end
-	if direction == "down" then
-		Movement.pogo()
-		Fx.ring(contact - Vector3.new(0, 0.5, 0), NAIL_COLOR, 4, 0.3, 0.4)
-	elseif direction == "side" then
-		Movement.recoil(-1, 14, 0.07)
+	-- Heavy blows land on their contact frame; quick ones resolve at once.
+	if finisher then
+		task.delay(0.13, resolve)
+	else
+		resolve()
 	end
 end
 
@@ -302,9 +364,14 @@ local function attack()
 		return
 	end
 	local now = os.clock()
-	if now - lastAttack < Config.ATTACK_COOLDOWN then
+	if now < nextAttackAt then
+		-- Pressed a little early: remember it and swing the moment it's allowed.
+		if nextAttackAt - now <= BUFFER then
+			queuedAt = now
+		end
 		return
 	end
+	queuedAt = nil
 	lastAttack = now
 	swing(strikeDirection(root))
 
@@ -314,6 +381,7 @@ local function attack()
 		chargeReady = false
 	end
 end
+CombatClient.attack = attack
 
 local function stopCharge()
 	chargeStart = nil
@@ -423,6 +491,13 @@ local function focus()
 			break
 		end
 		Movement.setRooted(true)
+		if emitter and not emitter.Enabled then
+			-- The gathering begins: a soft rising tone and light drawn inward.
+			Sfx.play("charge", 0.6)
+			if State.root then
+				Fx.ring(State.root.Position - Vector3.new(0, 2.8, 0), Color3.fromRGB(220, 230, 255), 5, 0.5, 0.55)
+			end
+		end
 		if emitter then
 			emitter.Enabled = true
 		end
@@ -479,6 +554,12 @@ function CombatClient.init()
 
 	RunService.RenderStepped:Connect(function()
 		local now = os.clock()
+		if queuedAt and now >= nextAttackAt then
+			if now - queuedAt <= BUFFER + 0.1 then
+				attack()
+			end
+			queuedAt = nil
+		end
 		-- Drop the lock when the target falls or wanders out of range.
 		local target = State.lockTarget
 		if target then
@@ -578,10 +659,25 @@ function CombatClient.init()
 
 	Movement.onLand = function(position: Vector3, speed: number)
 		if speed > 18 then
-			Characters.action("land")
-			Fx.ring(position, DUST, math.clamp(speed / 12, 2, 6), 0.4)
+			-- Harder landings bend deeper (the clip plays faster the softer the landing).
+			Characters.action("land", math.clamp(28 / speed, 0.7, 1.3))
+			if speed > 70 then
+				Fx.groundBurst(position, DUST, math.clamp(speed / 12, 3, 7))
+				CameraController.shake(0.25)
+			else
+				Fx.ring(position, DUST, math.clamp(speed / 12, 2, 6), 0.4)
+			end
 		end
 		Fx.puff(position, DUST, math.clamp(speed / 20, 1.5, 4.5), 0.45)
+	end
+
+	Movement.onWallJump = function(normal: Vector3)
+		Characters.action("wallJump")
+		local root = State.root
+		if root then
+			Fx.puff(root.Position - normal * 1.2, DUST, 1.6, 0.3)
+			Fx.sparks(root.Position - normal * 1.4, Color3.fromRGB(220, 215, 200), 4, 0.8, normal)
+		end
 	end
 
 	Movement.onStep = function(position: Vector3)

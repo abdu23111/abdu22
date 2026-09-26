@@ -58,6 +58,7 @@ type Enemy = {
 	model: Model?,
 	hitbox: BasePart?,
 	wander: number,
+	stunUntil: number?,
 }
 
 local enemies: { Enemy } = {}
@@ -166,20 +167,24 @@ local function spawnEnemy(enemy: Enemy)
 	model.Parent = folder
 
 	Damageable.register(model, {
-		onHit = function(player: Player, damage: number, direction: Vector3)
+		onHit = function(player: Player, damage: number, direction: Vector3, kind: string?)
 			if not enemy.alive then
 				return false
 			end
 			enemy.hp -= damage
+			local heavy = kind == "cleave" or kind == "finish"
+			model:SetAttribute("HitKind", kind or "nail")
 			model:SetAttribute("HitAt", os.clock())
+			-- A blow knocks the creature off its stride for a moment (longer for heavy ones).
+			enemy.stunUntil = os.clock() + (if heavy then 0.6 else 0.18)
 			local flying = def.behavior == "flyer" or def.behavior == "shooter"
 			-- Recoil away from the strike.
-			local push = (if flying then direction else flat(direction)) * 2
+			local push = (if flying then direction else flat(direction)) * (if heavy then 4.5 else 2)
 			if not blocked(enemy.position, push * 1.5) then
 				enemy.position += push
 			end
 			if flying then
-				enemy.velocity = direction * 18
+				enemy.velocity = direction * (if heavy then 30 else 18)
 			end
 			if enemy.hp <= 0 then
 				enemy.alive = false
@@ -499,7 +504,9 @@ function Enemies.init(infos, playerService)
 					end
 				end
 			elseif activeZones[enemy.zone] then
-				update(enemy, dt, now)
+				if not (enemy.stunUntil and now < enemy.stunUntil) then
+					update(enemy, dt, now)
+				end
 				place(enemy)
 				local hitbox = enemy.hitbox
 				if hitbox then

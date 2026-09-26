@@ -11,6 +11,9 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Rig = require(Shared.Rig)
+local Grid = require(Shared.Grid)
+local Zones = require(Shared.Zones)
+local Themes = require(Shared.Themes)
 local State = require(script.Parent.State)
 local Fx = require(script.Parent.Fx)
 local Sfx = require(script.Parent.Sfx)
@@ -33,9 +36,25 @@ type Entry = {
 	warn: boolean,
 	dead: boolean,
 	color: Color3,
+	theta: number,
+	facingSign: number,
+	noticed: boolean,
+	serverAnim: string,
+	deadAt: number,
 }
 
 local entries: { [Model]: Entry } = {}
+
+-- The glow colour of the region a point is in (for cracks and bursts that match the area).
+local function regionAccent(pos: Vector3): Color3
+	local zi = Grid.zoneAt(pos)
+	if zi then
+		return Themes[Zones[zi].theme].accent
+	end
+	return Color3.fromRGB(255, 200, 140)
+end
+-- Creatures whose model is gone but whose defeat is still playing out.
+local dying: { Entry } = {}
 local rigFolder: Folder
 
 local CULL_DISTANCE = 260
@@ -108,6 +127,8 @@ local function onEvent(entry: Entry, name: string)
 	local reach = math.max(size.X, size.Z)
 	if name == "quake" then
 		Fx.ring(feet, Color3.fromRGB(150, 140, 130), reach * 1.6, 0.6)
+		Fx.crack(feet + f * reach * 0.4, regionAccent(feet), 4)
+		Fx.debris(feet, reach * 5, nil, 7)
 		Fx.puff(feet + f * reach * 0.5, Color3.fromRGB(120, 112, 108), reach * 0.6, 0.6)
 		if nearLocal(feet, 60) then
 			CameraController.shake(0.6)
@@ -171,6 +192,11 @@ local function build(model: Model)
 		warn = false,
 		dead = false,
 		color = mainColor(rig),
+		theta = if hitbox.CFrame.XVector.X < 0 then math.pi else 0,
+		facingSign = if hitbox.CFrame.XVector.X < 0 then -1 else 1,
+		noticed = false,
+		serverAnim = "idle",
+		deadAt = 0,
 	}
 	entries[model] = entry
 	rig.onEvent = function(name: string)
@@ -191,10 +217,34 @@ local function build(model: Model)
 
 	model:GetAttributeChangedSignal("Anim"):Connect(function()
 		local anim = (model:GetAttribute("Anim") or "idle") :: string
-		playAnim(entry, anim, false)
-		-- Lunges and slams kick up dust.
-		if (anim == "attack" or anim == "slam") and not entry.dead and entry.anchor > 0 then
+		local previous = entry.serverAnim
+		entry.serverAnim = anim
+		if entry.dead then
+			return
+		end
+		-- After an attack a creature takes a beat to recover before it goes back to walking.
+		if (previous == "attack" or previous == "slam") and (anim == "idle" or anim == "move") and rig:has("recover") then
+			entry.anim = "recover"
+			entry.oneShot = true
+			rig:play("recover", 0.08, 1, true)
+		else
+			playAnim(entry, anim, false)
+		end
+		-- Lunges and slams kick up dust; a boss's slam cracks the ground.
+		if (anim == "attack" or anim == "slam") and entry.anchor > 0 then
 			Fx.puff(entry.pos + Vector3.new(0, 0.5, 0), entry.color:Lerp(Color3.fromRGB(170, 160, 150), 0.6), math.max(2, hitbox.Size.X * 0.6), 0.4)
+		end
+		if entry.boss and anim == "slam" then
+			Fx.groundBurst(entry.pos, entry.color:Lerp(WHITE, 0.4), math.max(8, hitbox.Size.X * 1.4))
+			Fx.crack(entry.pos, regionAccent(entry.pos), 5)
+		elseif entry.boss and anim == "stagger" then
+			-- Phase change: the guardian reels in a burst of light.
+			Fx.ring(entry.pos, WHITE, 18, 0.8, 0.3)
+			Fx.glitter(entry.pos + Vector3.new(0, hitbox.Size.Y * 0.6, 0), entry.color:Lerp(WHITE, 0.5), 36, hitbox.Size.X)
+			Fx.light(entry.pos + Vector3.new(0, hitbox.Size.Y * 0.6, 0), WHITE, 40, 3, 0.6)
+			if nearLocal(entry.pos, 90) then
+				CameraController.shake(1)
+			end
 		end
 	end)
 	model:GetAttributeChangedSignal("AnimAt"):Connect(function()
@@ -214,11 +264,17 @@ local function build(model: Model)
 	end)
 	model:GetAttributeChangedSignal("HitAt"):Connect(function()
 		entry.flash = 1
-		-- Small creatures flinch; bosses only flash so their attacks aren't interrupted.
-		if not entry.boss and not entry.dead and rig:has("hurt") then
-			entry.anim = "hurt"
-			entry.oneShot = true
-			rig:play("hurt", 0.03, 1, true)
+		-- Small creatures flinch, and reel from heavy blows; bosses only flash so their attacks
+		-- aren't interrupted.
+		local kind = model:GetAttribute("HitKind")
+		local heavy = kind == "finish" or kind == "cleave"
+		if not entry.boss and not entry.dead then
+			local clip = if heavy and rig:has("stagger") then "stagger" elseif rig:has("hurt") then "hurt" else nil
+			if clip then
+				entry.anim = clip
+				entry.oneShot = true
+				rig:play(clip, 0.03, 1, true)
+			end
 		end
 	end)
 	model:GetAttributeChangedSignal("Dead"):Connect(function()
@@ -226,17 +282,21 @@ local function build(model: Model)
 			return
 		end
 		entry.dead = true
+		entry.deadAt = os.clock()
 		local center = entry.pos + Vector3.new(0, hitbox.Size.Y / 2, 0)
-		if nearLocal(center, 70) then
-			Sfx.play("shatter", if entry.boss then 0.7 else nil)
-		end
 		if entry.boss then
+			if nearLocal(center, 70) then
+				Sfx.play("shatter", 0.7)
+			end
 			Fx.shatter(center, entry.color, 30, 2.4)
 			Fx.shatter(center, WHITE, 14, 1.6)
 			Fx.ring(entry.pos, WHITE, 26, 1, 0.3)
 		else
-			Fx.shatter(center, entry.color, 12, math.clamp(hitbox.Size.Magnitude / 5, 0.8, 1.8))
-			Fx.ring(entry.pos, entry.color:Lerp(WHITE, 0.4), 5, 0.4)
+			-- The defeat plays first (a lurch, then a collapse), then the creature shatters.
+			entry.anim = "death"
+			entry.oneShot = true
+			rig:play(if rig:has("death") then "death" else "hurt", 0.03, 1, true)
+			Fx.impact(center, entry.facing, entry.color:Lerp(WHITE, 0.5), false)
 		end
 	end)
 	model.AncestryChanged:Connect(function(_, parent)
@@ -244,15 +304,9 @@ local function build(model: Model)
 			return
 		end
 		entries[model] = nil
-		if entry.boss and entry.dead then
-			-- Let the death pose linger, then dissolve into light.
-			task.spawn(function()
-				for i = 1, 20 do
-					rig:setTransparency(i / 20)
-					task.wait(0.06)
-				end
-				rig:destroy()
-			end)
+		if entry.dead then
+			-- Keep animating until the defeat has played out (see the dying list).
+			table.insert(dying, entry)
 		else
 			rig:destroy()
 		end
@@ -305,15 +359,37 @@ function Creatures.init()
 			local moved = Vector3.new(entry.pos.X - before.X, 0, entry.pos.Z - before.Z).Magnitude
 			entry.speed += (moved / math.max(dt, 1e-3) - entry.speed) * math.min(1, dt * 8)
 
-			local wantFacing = Vector3.new(hitbox.CFrame.XVector.X, 0, hitbox.CFrame.XVector.Z)
-			if wantFacing.Magnitude > 1e-3 then
-				local blended = entry.facing:Lerp(wantFacing.Unit, 1 - math.exp(-dt * 10))
-				if blended.Magnitude > 1e-3 then
-					entry.facing = blended.Unit
+			local rig = entry.rig
+			-- Turning around sweeps past the camera (0 = right, pi = left), with a squash.
+			local xv = hitbox.CFrame.XVector.X
+			local sign = if xv < -0.2 then -1 elseif xv > 0.2 then 1 else entry.facingSign
+			if sign ~= entry.facingSign then
+				entry.facingSign = sign
+				if not entry.oneShot and not entry.dead and not entry.boss and rig:has("turn") then
+					entry.anim = "turn"
+					entry.oneShot = true
+					rig:play("turn", 0.05, 1, true)
 				end
 			end
+			local thetaWant = if entry.facingSign > 0 then 0 else math.pi
+			entry.theta += (thetaWant - entry.theta) * (1 - math.exp(-dt * (if entry.boss then 6 else 10)))
+			entry.facing = Vector3.new(math.cos(entry.theta), 0, math.sin(entry.theta))
 
-			local rig = entry.rig
+			-- Spotting the player: a hop and a "!" (and again if you leave and come back).
+			if root and not entry.boss and not entry.dead then
+				local d = (root.Position - entry.pos).Magnitude
+				if not entry.noticed and d < 16 then
+					entry.noticed = true
+					if not entry.oneShot and rig:has("notice") then
+						entry.anim = "notice"
+						entry.oneShot = true
+						rig:play("notice", 0.06, 1, true)
+					end
+					Fx.alert(entry.pos + Vector3.new(0, entry.hitbox.Size.Y + (if entry.anchor == 0 then 0.5 else 1.2), 0), WARN_COLOR)
+				elseif entry.noticed and d > 28 then
+					entry.noticed = false
+				end
+			end
 			-- One-shots return to walking or idling once they finish (death holds its last pose).
 			if entry.oneShot and rig:finished() and not entry.dead and entry.anim ~= "death" then
 				local next = if entry.speed > 2 and rig:has("move") then "move" else "idle"
@@ -344,6 +420,32 @@ function Creatures.init()
 
 			rig.lookTarget = if root and (root.Position - entry.pos).Magnitude < 40 then root.Position else nil
 			rig:update(dt, Rig.frame(entry.pos, entry.facing))
+		end
+
+		-- Defeats playing out after the model is gone.
+		for i = #dying, 1, -1 do
+			local entry = dying[i]
+			local age = t - entry.deadAt
+			local rig = entry.rig
+			local length = if entry.boss then 1.8 else 0.5
+			if entry.boss then
+				rig:setTransparency(math.clamp((age - 0.6) / 1.2, 0, 1))
+			else
+				rig:tint(WHITE, math.clamp(age / length, 0, 1))
+			end
+			rig:update(dt, Rig.frame(entry.pos, entry.facing))
+			if age >= length then
+				table.remove(dying, i)
+				if not entry.boss then
+					local center = entry.pos + Vector3.new(0, entry.hitbox.Size.Y / 2, 0)
+					if nearLocal(center, 70) then
+						Sfx.play("shatter")
+					end
+					Fx.shatter(center, entry.color, 12, math.clamp(entry.hitbox.Size.Magnitude / 5, 0.8, 1.8))
+					Fx.ring(entry.pos, entry.color:Lerp(WHITE, 0.4), 5, 0.4)
+				end
+				rig:destroy()
+			end
 		end
 	end)
 end

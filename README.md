@@ -54,10 +54,29 @@ Everything is composed and synthesised from scratch by `tools/compose.py` (needs
 
 ## Controls
 
-Vesperdeep is fully 3D: a third-person camera follows you through winding caverns.
+Vesperdeep is a 2D side-scroller: the camera looks at the caves from the side and everything moves on one plane, with the cave's back wall and distant scenery drifting behind in parallax.
 
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
+| Move | A / D (or arrows) | Left stick |
+| Aim up / down; hold while standing still to look around | W / S | Stick up / down |
+| Jump (hold for height) | Space | A |
+| Nail strike (strike again quickly for a 3-hit combo) | J or left click | X |
+| Upward strike / downward strike in the air (pogo) | W + strike / S + strike | Up / down + X |
+| Cleaving Arc *(found later)* | Hold the strike button, release | Hold X |
+| Dodge roll (brief invulnerability) | Q or C | L2 |
+| Dash *(found later)* | Shift | R1 / B |
+| Lumen Bolt *(found later)* | R | R2 |
+| Swing from a glowing ring (hold; release or jump to let go) | G | L3 / D-pad up |
+| Focus Soul to heal | Hold F or right click | L1 |
+| Talk / rest at bench | E | Y |
+| Charms (at a bench) | Tab | |
+| Journal: map, abilities, memories | M | View / Back |
+| Show / hide controls | H | |
+
+Phones and tablets get a floating joystick and on-screen buttons.
+
+---|---|---|
 | Move (relative to the camera) | W A S D | Left stick |
 | Look around | Mouse | Right stick |
 | Lock on to a foe / release | T or middle click | R3 |
@@ -146,8 +165,9 @@ Eight regions, linked in loops so later abilities open shortcuts back through ea
 - **Every region has its own colours and props.** Dusky violet burrows with amber lanterns and coral fungus; a golden ancient city of columns, statues and blue banners; a green overgrown grotto with giant glowing mushrooms, ferns and ivy; an ivory-and-gold sanctum with braziers; a violet crystal mine with mine carts and timber frames; a teal drowned archive of bookshelves and reading desks; a silver abyss of abandoned lanterns; and the Glowmire's blue mushroom forest. Each region owns its terrain materials, so floors, walls and distant rock all differ.
 - **Readable lighting.** Pools of coloured light every few metres along every path, lit ledges high on tall walls, lanterns hanging in the dark above, brighter per-region ambient light, a coloured haze instead of black fog, gentle bloom and a light vignette. Motes, spores and dust drift in the air.
 - **Set pieces.** Stone arches, timber frames and root arches span the paths; floating platforms become rope bridges, gilded slabs or giant mushroom caps; every doorway has a signpost naming where it leads; windows in the cave walls look out over distant scenery (a lamplit mining village, the golden city's towers, giant trees and waterfalls, crystal spires, drowned stacks, a sea of drifting lanterns, a forest of glowing mushrooms).
-- **Animated characters.** Everyone (the Wanderer, eight residents, seven kinds of enemy and seven guardians) is a hand-authored bone rig with keyframed clips (anticipation, follow-through, squash and stretch), built from `src/shared/Rigs/`. The Wanderer is an original moth adventurer drawn at 1.3× so it reads clearly: amber eyes and brows, a cream ruff, feathered antennae, a teal cloak lined in amber, a rust scarf, folded wings and a gilded leaf-blade. Eyes blink, heads turn to follow you, candles and lamps flicker.
-- **Combat feel:** blade-light arcs, impact frames with a brief hit-stop, sparks, soul wisps, screen shake, dash afterimages, dust rings, enemy telegraph flares and warning rings, lunges that kick up dust, discovery bursts when you pick something up, and creatures that shatter when defeated.
+- **Animation.** Every character is a hand-authored bone rig (`src/shared/Rigs/`, written by `tools/rigs.py`); no Roblox animation IDs are needed. The Wanderer has idle (breathing, blinking, an occasional look around), run with feet matched to ground speed, run start / stop / turn transitions, jump take-off, rise, apex, fall and landing (deeper the harder you land), wall slide, wall kick, push against walls, dash, dodge, swing, heal, hurt and defeat, and a three-hit combo (slash, rising backhand, heavy finisher) plus up, down and charged strikes. `client/Characters.luau` picks clips with priorities so nothing incompatible overlaps, cancels transitions the moment they stop fitting, and turns the head toward nearby people, items and creatures. Enemies notice you (a hop and a "!"), patrol, turn, wind up, attack, recover, flinch, stagger from heavy blows and play their defeat before shattering; NPCs breathe, blink, glance around, react when you approach and gesture while talking; guardians roar on entrance, reel on phase changes and collapse in light.
+- **Combat effects:** each attack has its own sweeping blade arc (shape and colour) laid over its real hitbox, a small contact flash, sparks, a brief hit-stop, light screen shake, recoil and its own sound; the finisher bursts on the ground. Boss slams crack the ground and quakes shake debris loose; every enemy and boss attack is announced by a glow, a flare and a warning ring, and landing spots get glowing columns.
+- **A living world:** vines and roots sway, crystals, fungus and mushroom gills pulse, candles and lanterns flicker, water drips in the damp regions and pebbles fall from the ceiling now and then, all animated only near the camera. Effects share a budget so the screen (and the device) never floods.
 - **Keeping it playable:** big props stand in a band along each wall so the middle of the path stays clear; anything that looks solid near a wall is collidable, everything else is non-colliding and ignored by gameplay raycasts; nothing is placed on hazards or next to doors, benches, NPCs, items, switches or gates; boss arenas get only non-colliding dressing.
 - **Performance:** about 28k parts for the whole kingdom; only the region you're in runs its lights and particles, enemies only think while a player shares their region, and far-away rigs stop animating.
 
@@ -177,7 +197,8 @@ src/client/                 Movement, orbit camera, combat feel, HUD, menus, jou
   Characters.luau           Animates every player's Wanderer rig
   Creatures.luau            Animates enemies, guardians and Echoes from the server's hitboxes
   NPCs.luau                 The residents' idles, glances, reactions and talking
-  Fx.luau                   Slash arcs, impacts, shatters, wisps, afterimages, dust rings
+  Fx.luau                   Slash arcs, impacts, ground bursts, cracks, debris, shatters, wisps, afterimages
+  Ambient.luau              Swaying vines, pulsing crystals, flickering lights, falling pebbles
 assets/music/, assets/sfx/  The original soundtrack and sound effects (.ogg)
 tools/zones.py              Level layout script (writes src/shared/Zones.luau)
 tools/compose.py            The procedural composer for all music and sound effects

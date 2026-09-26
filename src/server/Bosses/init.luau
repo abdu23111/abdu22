@@ -630,12 +630,13 @@ local function startFight(fight: Fight, players: { Player })
 	end
 
 	Damageable.register(b.model, {
-		onHit = function(_player: Player, damage: number)
+		onHit = function(_player: Player, damage: number, _direction: Vector3?, kind: string?)
 			if b.cancelled or b.hp <= 0 or fight.state ~= "fighting" or b.hidden then
 				return false
 			end
 			b.hp -= damage
 			fight.stateFolder:SetAttribute("Health", math.max(0, b.hp))
+			b.model:SetAttribute("HitKind", kind or "nail")
 			b.model:SetAttribute("HitAt", os.clock())
 			if b.hp <= 0 then
 				dyingSequence(fight, b)

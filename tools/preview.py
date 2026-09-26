@@ -276,7 +276,14 @@ def mixed_sheet(entries, cols=4, size=(260, 260), fps=24, seconds=None):
     renders = []
     for name, clip in entries:
         rig = load(name)
-        renders.append(render_clip(rig, clip, rig["clips"][clip], fps, size))
+        if isinstance(clip, (list, tuple)):
+            # A sequence of clips played back to back, as they chain in game.
+            frames = []
+            for c in clip:
+                frames += render_clip(rig, c, rig["clips"][c], fps, size)
+            renders.append(frames)
+        else:
+            renders.append(render_clip(rig, clip, rig["clips"][clip], fps, size))
     n = int(seconds * fps) if seconds else max(len(r) for r in renders)
     rows = math.ceil(len(entries) / cols)
     frames = []
@@ -289,6 +296,10 @@ def mixed_sheet(entries, cols=4, size=(260, 260), fps=24, seconds=None):
 
 
 SHOWCASE = {
+    "showcase_combo": [("wanderer", ["attackSide", "attackSide2", "attackFinish"]), ("wanderer", ["runStart", "run", "run", "runStop", "idle"]),
+                       ("wanderer", ["jumpStart", "rise", "apex", "fall", "land"]), ("wanderer", ["idleLook"])],
+    "showcase_reactions": [("mite", ["notice", "move", "windup", "attack", "recover"]), ("shellguard", ["notice", "stagger", "death"]),
+                           ("hopper", ["turn", "windup", "attack", "hurt"]), ("gnat", ["notice", "move", "stagger", "death"])],
     "showcase_wanderer": [("wanderer", c) for c in ["idle", "run", "attackSide", "attackUp", "cleave", "dash", "swing", "heal"]],
     "showcase_npcs": [(n, "idle") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
     "showcase_npcs_talk": [(n, "talk") for n in ["wick", "tock", "lirra", "pell", "quill", "ilo", "oriel", "sael"]],
@@ -302,7 +313,7 @@ SHOWCASE = {
 def showcase():
     os.makedirs(OUT, exist_ok=True)
     for name, entries in SHOWCASE.items():
-        frames = mixed_sheet(entries, seconds=2.5)
+        frames = mixed_sheet(entries, seconds=None if name in ("showcase_combo", "showcase_reactions") else 2.5)
         save_gif(frames, os.path.join(OUT, f"{name}.gif"), fps=24)
         frames[len(frames) // 3].save(os.path.join(OUT, f"{name}.png"))
         print("rendered", name)

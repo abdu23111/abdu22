@@ -27,6 +27,7 @@ Movement.onLand = nil :: ((Vector3, number) -> ())?
 Movement.onStep = nil :: ((Vector3) -> ())?
 Movement.onJump = nil :: (() -> ())?
 Movement.onHurt = nil :: (() -> ())?
+Movement.onWallJump = nil :: ((Vector3) -> ())?
 Movement.onSwing = nil :: ((Vector3?) -> ())? -- anchor when a swing starts, nil when it ends
 
 local jumpPressedAt = -1
@@ -413,6 +414,11 @@ local function step(dt: number)
 			v = Vector3.new(push.X, Config.JUMP_VELOCITY, push.Z)
 			Movement.shove(push, Config.WALL_JUMP_LOCK)
 			jumped = true
+			-- Face away from the wall as you kick off it.
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + wallNormal)
+			if Movement.onWallJump then
+				Movement.onWallJump(wallNormal)
+			end
 		elseif State.hasAbility("HasWings") and not usedDouble and not grounded then
 			usedDouble = true
 			v = Vector3.new(v.X, Config.JUMP_VELOCITY * 0.95, v.Z)
@@ -493,6 +499,13 @@ local function step(dt: number)
 		humanoid.WalkSpeed = baseSpeed
 		humanoid:Move(move)
 		State.action = if wallNormal then "wall" else nil
+		-- Walking into a wall on the ground: lean into it instead of running on the spot.
+		if not wallNormal and grounded and move.Magnitude > 0.5 then
+			local ahead = workspace:Raycast(root.Position - Vector3.new(0, 1.5, 0), move.Unit * 2.2, wallParams)
+			if ahead and math.abs(ahead.Normal.Y) < 0.4 then
+				State.action = "push"
+			end
+		end
 	end
 
 	v = Vector3.new(v.X, math.max(v.Y, -Config.MAX_FALL_SPEED), v.Z)
