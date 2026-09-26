@@ -39,6 +39,41 @@ function Grid.zoneAt(position: Vector3): number?
 	return nil
 end
 
+-- Half-width of the cave corridor at a map column (studs, measured from z = 0).
+local halfCache: { [number]: { number } } = {}
+function Grid.halfWidth(zoneIndex: number, col: number): number
+	local cache = halfCache[zoneIndex]
+	if not cache then
+		cache = {}
+		local zone = Zones[zoneIndex]
+		local w = #zone.map[1]
+		local arena: { number }? = nil
+		for _, spec in zone.specials do
+			if spec.kind == "boss" and spec.arena then
+				arena = spec.arena
+			end
+		end
+		for c = 1, w do
+			local base = Config.CORRIDOR + Config.CORRIDOR_WANDER * math.noise(c * 0.07, zoneIndex * 3.1)
+			if arena and c >= arena[1] - 2 and c <= arena[2] + 2 then
+				-- Ease into the arena's wider chamber.
+				local inside = math.min(c - (arena[1] - 2), (arena[2] + 2) - c)
+				local t = math.clamp(inside / 4, 0, 1)
+				base = base + (Config.ARENA_HALF - base) * t
+			end
+			cache[c] = math.floor(base / Config.TILE + 0.5) * Config.TILE
+		end
+		halfCache[zoneIndex] = cache
+	end
+	local w = #cache
+	return cache[math.clamp(math.floor(col + 0.5), 1, w)]
+end
+
+-- Map column for a world X inside a zone.
+function Grid.colAt(zoneIndex: number, x: number): number
+	return (x - Grid.originX(zoneIndex)) / T + 0.5
+end
+
 function Grid.zoneIndexById(id: string): number?
 	for i, zone in Zones do
 		if zone.id == id then

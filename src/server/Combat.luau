@@ -34,7 +34,7 @@ function Combat.init(infos, PlayerService)
 	local bolts: { Bolt } = {}
 
 	local include = { workspace:WaitForChild("Enemies"), workspace:WaitForChild("Echoes") }
-	local solids = {}
+	local solids = { workspace.Terrain }
 	for _, info in infos do
 		table.insert(include, info.folder:FindFirstChild("Breakables"))
 		table.insert(include, info.folder:FindFirstChild("Switches"))
@@ -129,11 +129,17 @@ function Combat.init(infos, PlayerService)
 		if not root or (player:GetAttribute("Masks") or 0) <= 0 then
 			return
 		end
-		local facing = if root.CFrame.LookVector.X >= 0 then 1 else -1
+		local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
 		local reach = if PlayerService.hasCharm(player, "long_reach") then 1.35 else 1
-		local center, size = Hitbox.nail(root.Position, facing, direction :: string, reach)
+		local boxCFrame, size = Hitbox.nail(root.CFrame, direction :: string, reach)
 		-- A little extra room to forgive network latency.
-		size += Vector3.new(1.5, 1.5, 0)
+		size += Vector3.new(1.5, 1.5, 1.5)
+		local character = player.Character
+		if character then
+			-- Lets every client animate this player's swing.
+			character:SetAttribute("Swing", direction)
+			character:SetAttribute("SwingAt", now)
+		end
 
 		local damage = nailDamage(player)
 		local kind = "nail"
@@ -141,8 +147,8 @@ function Combat.init(infos, PlayerService)
 			damage = math.floor(damage * Config.CLEAVE_MULT + 0.5)
 			kind = "cleave"
 		end
-		local knock = if direction == "up" then Vector3.new(0, 1, 0) elseif direction == "down" then Vector3.new(0, -1, 0) else Vector3.new(facing, 0, 0)
-		local parts = workspace:GetPartBoundsInBox(CFrame.new(center), size, params)
+		local knock = if direction == "up" then Vector3.new(0, 1, 0) elseif direction == "down" then Vector3.new(0, -1, 0) else look
+		local parts = workspace:GetPartBoundsInBox(boxCFrame, size, params)
 		if strike(player, parts, damage, knock, kind, {}) then
 			PlayerService.addSoul(player, Config.SOUL_PER_HIT)
 		end
@@ -150,7 +156,7 @@ function Combat.init(infos, PlayerService)
 
 	-- ===== Lumen Bolt =====
 
-	Net.event("Bolt").OnServerEvent:Connect(function(player: Player)
+	Net.event("Bolt").OnServerEvent:Connect(function(player: Player, aim: unknown)
 		if not player:GetAttribute("HasBolt") then
 			return
 		end
@@ -165,9 +171,22 @@ function Combat.init(infos, PlayerService)
 		end
 		lastBolt[player] = now
 		player:SetAttribute("Soul", soul - Config.BOLT_COST)
-		local facing = if root.CFrame.LookVector.X >= 0 then 1 else -1
+		local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+		-- Aim toward the client's lock-on target if it's roughly in front of the player.
+		local dir = look
+		if typeof(aim) == "Vector3" and aim.Magnitude > 0.5 then
+			local a = aim.Unit
+			if a:Dot(look) > 0.4 then
+				dir = a
+			end
+		end
 		local spur = PlayerService.hasCharm(player, "glass_spur")
-		local start = root.Position + Vector3.new(facing * 2, 0.4, 0)
+		local start = root.Position + dir * 2 + Vector3.new(0, 0.4, 0)
+		local character = player.Character
+		if character then
+			character:SetAttribute("Swing", "bolt")
+			character:SetAttribute("SwingAt", now)
+		end
 		local part = Props.make("Part", {
 			Name = "LumenBolt",
 			Anchored = true,
@@ -175,8 +194,8 @@ function Combat.init(infos, PlayerService)
 			CanQuery = false,
 			CanTouch = false,
 			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(4, 1.8, 1.8),
-			Position = start,
+			Size = Vector3.new(1.8, 1.8, 4),
+			CFrame = CFrame.lookAt(start, start + dir),
 			Color = Color3.fromRGB(235, 245, 255),
 			Material = Enum.Material.Neon,
 			Parent = workspace,
@@ -197,7 +216,7 @@ function Combat.init(infos, PlayerService)
 			player = player,
 			part = part,
 			position = start,
-			velocity = Vector3.new(facing * Config.BOLT_SPEED, 0, 0),
+			velocity = dir * Config.BOLT_SPEED,
 			travelled = 0,
 			range = Config.BOLT_RANGE * (if spur then 1.3 else 1),
 			damage = math.floor(Config.BOLT_DAMAGE * (if spur then 1.5 else 1)),
@@ -212,9 +231,9 @@ function Combat.init(infos, PlayerService)
 			local hitWall = workspace:Raycast(bolt.position, step, wallParams)
 			bolt.position += step
 			bolt.travelled += step.Magnitude
-			bolt.part.Position = bolt.position
-			local parts = workspace:GetPartBoundsInBox(CFrame.new(bolt.position), Vector3.new(3.5, 3, 8), params)
-			strike(bolt.player, parts, bolt.damage, Vector3.new(math.sign(bolt.velocity.X), 0, 0), "bolt", bolt.struck)
+			bolt.part.CFrame = CFrame.lookAt(bolt.position, bolt.position + bolt.velocity)
+			local parts = workspace:GetPartBoundsInBox(CFrame.lookAt(bolt.position, bolt.position + bolt.velocity), Vector3.new(3.5, 3.5, 4), params)
+			strike(bolt.player, parts, bolt.damage, bolt.velocity.Unit, "bolt", bolt.struck)
 			if hitWall or bolt.travelled >= bolt.range or not bolt.player.Parent then
 				Enemies.burst(bolt.position, Color3.fromRGB(220, 240, 255), 18)
 				bolt.part:Destroy()
@@ -237,7 +256,8 @@ function Combat.init(infos, PlayerService)
 			local target, handler = Damageable.find(part)
 			if target and handler and not struck[target] and target.Parent ~= workspace:FindFirstChild("Echoes") then
 				struck[target] = true
-				handler.onHit(player, 10, Vector3.new(math.sign(part.Position.X - root.Position.X), 0, 0))
+				local away = part.Position - root.Position
+				handler.onHit(player, 10, Vector3.new(away.X, 0, away.Z).Unit)
 			end
 		end
 	end

@@ -7,6 +7,12 @@ local Config = {}
 Config.TILE = 4 -- studs per map tile
 Config.DEPTH = 14 -- thickness of foreground tiles along Z
 Config.ZONE_SPACING = 1200 -- zones are laid out side by side along X, this far apart
+-- 3D caves: each map is extruded into a winding corridor. Its half-width (in studs) wanders
+-- around CORRIDOR by up to CORRIDOR_WANDER; boss arenas open up to ARENA_HALF.
+Config.CORRIDOR = 17
+Config.CORRIDOR_WANDER = 6
+Config.ARENA_HALF = 30
+Config.WALL_THICKNESS = 14
 
 -- Player vitals
 Config.BASE_MASKS = 5

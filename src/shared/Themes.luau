@@ -18,6 +18,11 @@ export type Theme = {
 	tint: Color3, -- colour correction tint
 	material: Enum.Material,
 	decor: string,
+	-- 3D terrain: rock for walls and ceilings, a surface material for walkable tops.
+	wall: Enum.Material,
+	top: Enum.Material,
+	wallColor: Color3,
+	topColor: Color3,
 }
 
 local Themes: { [string]: Theme } = {
@@ -37,6 +42,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(235, 232, 255),
 		material = Enum.Material.Slate,
 		decor = "caves",
+		wall = Enum.Material.Slate,
+		top = Enum.Material.Asphalt,
+		wallColor = Color3.fromRGB(58, 56, 64),
+		topColor = Color3.fromRGB(96, 92, 96),
 	},
 	ruins = {
 		rock = Color3.fromRGB(60, 66, 86),
@@ -54,6 +63,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(225, 235, 255),
 		material = Enum.Material.Cobblestone,
 		decor = "city",
+		wall = Enum.Material.Cobblestone,
+		top = Enum.Material.Pavement,
+		wallColor = Color3.fromRGB(60, 66, 86),
+		topColor = Color3.fromRGB(120, 128, 150),
 	},
 	forest = {
 		rock = Color3.fromRGB(44, 62, 52),
@@ -71,6 +84,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(228, 255, 236),
 		material = Enum.Material.Ground,
 		decor = "forest",
+		wall = Enum.Material.Ground,
+		top = Enum.Material.LeafyGrass,
+		wallColor = Color3.fromRGB(44, 58, 48),
+		topColor = Color3.fromRGB(70, 120, 74),
 	},
 	temple = {
 		rock = Color3.fromRGB(96, 88, 78),
@@ -88,6 +105,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(255, 240, 225),
 		material = Enum.Material.Marble,
 		decor = "temple",
+		wall = Enum.Material.Limestone,
+		top = Enum.Material.Sandstone,
+		wallColor = Color3.fromRGB(120, 108, 92),
+		topColor = Color3.fromRGB(196, 170, 120),
 	},
 	mines = {
 		rock = Color3.fromRGB(52, 44, 70),
@@ -105,6 +126,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(245, 228, 255),
 		material = Enum.Material.Basalt,
 		decor = "crystal",
+		wall = Enum.Material.Basalt,
+		top = Enum.Material.Glacier,
+		wallColor = Color3.fromRGB(50, 42, 68),
+		topColor = Color3.fromRGB(200, 150, 240),
 	},
 	archive = {
 		rock = Color3.fromRGB(44, 60, 66),
@@ -122,6 +147,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(225, 250, 250),
 		material = Enum.Material.WoodPlanks,
 		decor = "library",
+		wall = Enum.Material.Rock,
+		top = Enum.Material.WoodPlanks,
+		wallColor = Color3.fromRGB(40, 56, 62),
+		topColor = Color3.fromRGB(90, 70, 56),
 	},
 	hollow = {
 		rock = Color3.fromRGB(40, 40, 44),
@@ -139,6 +168,10 @@ local Themes: { [string]: Theme } = {
 		tint = Color3.fromRGB(235, 235, 240),
 		material = Enum.Material.Slate,
 		decor = "abyss",
+		wall = Enum.Material.Mud,
+		top = Enum.Material.Salt,
+		wallColor = Color3.fromRGB(34, 34, 38),
+		topColor = Color3.fromRGB(200, 200, 206),
 	},
 }
 

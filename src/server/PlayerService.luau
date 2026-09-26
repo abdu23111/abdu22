@@ -342,6 +342,9 @@ local function die(player: Player)
 		end
 	end
 	player:SetAttribute("Soul", 0)
+	if player.Character then
+		player.Character:SetAttribute("Dead", true)
+	end
 	Net.event("Died"):FireClient(player)
 	PlayerService.save(player)
 	task.delay(2.2, function()
@@ -373,6 +376,9 @@ function PlayerService.damage(player: Player, amount: number, sourcePosition: Ve
 	local masks = ((player:GetAttribute("Masks") or 0) :: number) - amount
 	player:SetAttribute("Masks", math.max(0, masks))
 	player:SetAttribute("LastHurt", now)
+	if player.Character then
+		player.Character:SetAttribute("HurtAt", now)
+	end
 	if masks <= 0 then
 		die(player)
 		return
@@ -380,11 +386,15 @@ function PlayerService.damage(player: Player, amount: number, sourcePosition: Ve
 	if hazard then
 		Net.event("HazardRespawn"):FireClient(player)
 	else
-		local dirX = 1
+		local away = -root.CFrame.LookVector
 		if sourcePosition then
-			dirX = if root.Position.X >= sourcePosition.X then 1 else -1
+			local d = root.Position - sourcePosition
+			d = Vector3.new(d.X, 0, d.Z)
+			if d.Magnitude > 0.1 then
+				away = d.Unit
+			end
 		end
-		Net.event("Knockback"):FireClient(player, dirX)
+		Net.event("Knockback"):FireClient(player, away)
 	end
 end
 
@@ -392,49 +402,31 @@ end
 
 local function dressCharacter(character: Model)
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
-	local head = character:WaitForChild("Head") :: BasePart
-	local torso = (character:FindFirstChild("UpperTorso") or character:WaitForChild("Torso")) :: BasePart
+	character:WaitForChild("HumanoidRootPart")
 	humanoid:RemoveAccessories()
 	humanoid.MaxHealth = 1e6
 	humanoid.Health = 1e6
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.BreakJointsOnDeath = false
 	humanoid.WalkSpeed = Config.WALK_SPEED
 	humanoid.UseJumpPower = true
 	humanoid.JumpPower = Config.JUMP_VELOCITY
-
-	for _, d in character:GetDescendants() do
-		if d:IsA("Decal") and d.Name == "face" then
+	-- The Roblox avatar becomes an invisible collider; every client draws the Wanderer rig
+	-- (Shared/Rigs/wanderer) on top of it.
+	local function hide(d: Instance)
+		if d:IsA("BasePart") then
+			d.Transparency = 1
+			d.CastShadow = false
+		elseif d:IsA("Decal") then
 			d.Transparency = 1
 		end
 	end
-
-	local function attach(p: BasePart, to: BasePart, offset: CFrame)
-		p.Anchored = false
-		p.CanCollide = false
-		p.CanQuery = false
-		p.CanTouch = false
-		p.Massless = true
-		p.CFrame = to.CFrame * offset
-		make("WeldConstraint", { Part0 = to, Part1 = p, Parent = p })
-		p.Parent = character
+	for _, d in character:GetDescendants() do
+		hide(d)
 	end
-
-	local white = Color3.fromRGB(238, 236, 230)
-	attach(make("Part", { Name = "Mask", Shape = Enum.PartType.Ball, Size = Vector3.new(1.7, 1.8, 1.6), Color = white, Material = Enum.Material.SmoothPlastic }), head, CFrame.new(0, 0.1, 0))
-	-- The camera sees the character side-on, so eyes sit on both flanks and the horns
-	-- splay forward and back to read clearly in profile.
-	for _, x in { -0.78, 0.78 } do
-		attach(make("Part", { Name = "Eye", Shape = Enum.PartType.Ball, Size = Vector3.new(0.25, 0.62, 0.42), Color = Color3.fromRGB(8, 8, 12) }), head, CFrame.new(x, 0.05, -0.35))
-	end
-	for _, z in { -0.35, 0.35 } do
-		attach(make("Part", { Name = "Horn", Size = Vector3.new(0.28, 1.4, 0.28), Color = white }), head, CFrame.new(0, 1.25, z) * CFrame.Angles(z * 1.2, 0, 0))
-	end
-	attach(make("Part", { Name = "Cloak", Size = Vector3.new(2.3, 3, 1.5), Color = Color3.fromRGB(34, 36, 58), Material = Enum.Material.Fabric }), torso, CFrame.new(0, -0.4, 0.55))
-
-	local lantern = make("Part", { Name = "Lantern", Shape = Enum.PartType.Ball, Size = Vector3.one * 0.55, Color = Color3.fromRGB(255, 220, 170), Material = Enum.Material.Neon })
-	attach(lantern, torso, CFrame.new(0, -0.9, -1.1))
-	make("PointLight", { Range = 20, Brightness = 0.9, Color = Color3.fromRGB(255, 226, 190), Shadows = false, Parent = lantern })
+	character.DescendantAdded:Connect(hide)
+	character:SetAttribute("Rig", "wanderer")
 end
 
 local function spawnCFrame(player: Player): CFrame
@@ -662,6 +654,9 @@ function PlayerService.init(infos)
 		lastHeal[player] = now
 		player:SetAttribute("Soul", soul - Config.HEAL_COST)
 		player:SetAttribute("Masks", masks + 1)
+		if player.Character then
+			player.Character:SetAttribute("HealAt", now)
+		end
 		if data.charmsEquipped.kindled_spirit and PlayerService.onHealBurst then
 			PlayerService.onHealBurst(player)
 		end

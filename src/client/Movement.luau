@@ -1,6 +1,7 @@
--- Side-scrolling character controller: tight running and jumping with coyote time,
--- jump buffering and variable height, plus the dash, wall cling and double jump abilities.
--- Also handles doorways between zones, hazard respawns and knockback.
+-- Third-person character controller. Movement is relative to the camera; jumps use coyote
+-- time, buffering and variable height; the Drift Cloak dashes, the Sidestep dodges with
+-- brief invulnerability, Thorn Claws cling to any rough wall and Veil Wings give a second
+-- jump. Also handles doorways between regions, hazard respawns and knockback.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,12 +18,14 @@ local Sfx = require(script.Parent.Sfx)
 local player = Players.LocalPlayer
 
 local Movement = {}
-Movement.onTeleport = nil :: (() -> ())?
-Movement.onDash = nil :: ((number) -> ())?
+Movement.onTeleport = nil :: ((Vector3?) -> ())?
+Movement.onDash = nil :: ((Vector3) -> ())?
 Movement.onDoubleJump = nil :: (() -> ())?
-Movement.onDodge = nil :: ((number) -> ())?
+Movement.onDodge = nil :: ((Vector3) -> ())?
 Movement.onLand = nil :: ((Vector3, number) -> ())?
 Movement.onStep = nil :: ((Vector3) -> ())?
+Movement.onJump = nil :: (() -> ())?
+Movement.onHurt = nil :: (() -> ())?
 
 local jumpPressedAt = -1
 local jumpCutArmed = false
@@ -32,20 +35,22 @@ local jumpedSinceGround = false
 local usedDouble = false
 local dashReady = true
 local dashRequestedAt = -1
+local dashUntil = 0
+local dashDir = Vector3.xAxis
+local dashCooldownUntil = 0
 local dodgeRequestedAt = -1
 local dodgeUntil = 0
-local dodgeDir = -1
+local dodgeDir = Vector3.xAxis
 local dodgeCooldownUntil = 0
-local lastStepDust = 0
-local dashUntil = 0
-local dashDir = 1
-local dashCooldownUntil = 0
-local lockUntil, lockDir, lockSpeed = 0, 0, 0
+local lockUntil = 0
+local lockVelocity = Vector3.zero
 local rooted = false
 local wasGrounded = false
 local lastSafe: Vector3? = nil
 local lastSafeCheck = 0
 local doorCooldownUntil = 0
+local lastStepDust = 0
+local wallNormal: Vector3? = nil
 
 local world = workspace:WaitForChild("World")
 local doorsFolder = world:WaitForChild("Doors")
@@ -56,7 +61,7 @@ local hazardParams = OverlapParams.new()
 hazardParams.FilterType = Enum.RaycastFilterType.Include
 
 local function refreshFilters()
-	local solids, hazards = {}, {}
+	local solids, hazards = { workspace.Terrain }, {}
 	for _, zone in world:GetChildren() do
 		if zone:IsA("Folder") and zone.Name:sub(1, 5) == "Zone_" then
 			for _, name in { "Map", "Breakables" } do
@@ -75,6 +80,24 @@ local function refreshFilters()
 	hazardParams.FilterDescendantsInstances = hazards
 end
 
+local function flat(v: Vector3): Vector3
+	local f = Vector3.new(v.X, 0, v.Z)
+	return if f.Magnitude > 1e-4 then f.Unit else Vector3.zero
+end
+
+-- World-space movement direction from the stick and the camera's heading.
+local function moveWorld(): Vector3
+	local mv = Input.move()
+	if mv.Magnitude < 0.05 then
+		return Vector3.zero
+	end
+	local yaw = State.cameraYaw
+	local forward = Vector3.new(-math.sin(yaw), 0, -math.cos(yaw))
+	local right = Vector3.new(math.cos(yaw), 0, -math.sin(yaw))
+	local v = right * mv.X + forward * mv.Y
+	return if v.Magnitude > 1 then v.Unit else v
+end
+
 -- ===== Public API used by combat and focus =====
 
 function Movement.pogo()
@@ -83,7 +106,7 @@ function Movement.pogo()
 		return
 	end
 	local v = root.AssemblyLinearVelocity
-	root.AssemblyLinearVelocity = Vector3.new(v.X, Config.POGO_VELOCITY, 0)
+	root.AssemblyLinearVelocity = Vector3.new(v.X, Config.POGO_VELOCITY, v.Z)
 	usedDouble = false
 	dashReady = true
 	dashUntil = 0
@@ -91,63 +114,40 @@ function Movement.pogo()
 	groundIgnoreUntil = os.clock() + 0.1
 end
 
-function Movement.recoil(dir: number, speed: number, duration: number)
+-- Push the character along `velocity` for a moment, overriding input.
+function Movement.shove(velocity: Vector3, duration: number)
 	lockUntil = os.clock() + duration
-	lockDir = dir
-	lockSpeed = speed
+	lockVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+end
+
+-- Recoil along the facing direction (negative pushes backwards).
+function Movement.recoil(dir: number, speed: number, duration: number)
+	Movement.shove(State.facingVector * dir * speed, duration)
 end
 
 function Movement.setRooted(on: boolean)
 	rooted = on
 end
 
-function Movement.teleport(position: Vector3, facing: number?)
+function Movement.teleport(position: Vector3, facing: Vector3?)
 	local character, root = State.character, State.root
 	if not character or not root then
 		return
 	end
-	State.facing = facing or State.facing
-	character:PivotTo(CFrame.lookAt(position, position + Vector3.new(State.facing, 0, 0)))
+	local f = facing or State.facingVector
+	character:PivotTo(CFrame.lookAt(position, position + f))
 	root.AssemblyLinearVelocity = Vector3.zero
-	dashUntil, lockUntil = 0, 0
+	dashUntil, lockUntil, dodgeUntil = 0, 0, 0
 	if Movement.onTeleport then
-		Movement.onTeleport()
+		Movement.onTeleport(f)
 	end
 end
 
 local function flicker()
-	local character = State.character
-	if not character then
-		return
-	end
-	local untilTime = os.clock() + Config.INVULN_TIME
-	task.spawn(function()
-		local on = false
-		while os.clock() < untilTime and character.Parent do
-			on = not on
-			for _, d in character:GetDescendants() do
-				if d:IsA("BasePart") then
-					d.LocalTransparencyModifier = if on then 0.6 else 0
-				end
-			end
-			task.wait(0.08)
-		end
-		for _, d in character:GetDescendants() do
-			if d:IsA("BasePart") then
-				d.LocalTransparencyModifier = 0
-			end
-		end
-	end)
+	State.invulnUntil = os.clock() + Config.INVULN_TIME
 end
 
 -- ===== Frame step =====
-
-local function keepPlane(root: BasePart)
-	local p = root.Position
-	if math.abs(p.Z) > 0.05 or root.CFrame.LookVector.X * State.facing < 0.98 then
-		root.CFrame = CFrame.lookAt(Vector3.new(p.X, p.Y, 0), Vector3.new(p.X + State.facing, p.Y, 0))
-	end
-end
 
 local function transition(door: BasePart)
 	local digit = door:GetAttribute("Door")
@@ -167,7 +167,8 @@ local function transition(door: BasePart)
 	task.spawn(function()
 		Fade.out(0.3)
 		local arrival = target:GetAttribute("Arrival") :: Vector3
-		Movement.teleport(arrival, if arrival.X > target.Position.X then 1 else -1)
+		local inward = (target:GetAttribute("Inward") or 1) :: number
+		Movement.teleport(arrival, Vector3.new(inward, 0, 0))
 		lastSafe = arrival
 		task.wait(0.15)
 		State.freeze("door", false)
@@ -176,28 +177,33 @@ local function transition(door: BasePart)
 	end)
 end
 
-local function step()
+local function step(_dt: number)
 	local humanoid, root = State.humanoid, State.root
 	if not humanoid or not root or not humanoid.Parent then
 		return
 	end
 	local now = os.clock()
 	local v = root.AssemblyLinearVelocity
+	local facing = flat(root.CFrame.LookVector)
+	State.facingVector = if facing.Magnitude > 0.5 then facing else Vector3.xAxis
 
 	if State.frozen() or rooted then
 		humanoid:Move(Vector3.zero)
 		root.AssemblyLinearVelocity = Vector3.new(0, math.max(v.Y, -Config.MAX_FALL_SPEED), 0)
-		keepPlane(root)
+		State.moveSpeed = 0
+		State.action = if rooted then "heal" else nil
 		return
 	end
 
 	local grounded = humanoid.FloorMaterial ~= Enum.Material.Air and now >= groundIgnoreUntil
 	if grounded then
-		if not wasGrounded and v.Y < -45 then
-			Sfx.play("land")
-		end
-		if not wasGrounded and v.Y < -25 and Movement.onLand then
-			Movement.onLand(root.Position - Vector3.new(0, 3, 0), -v.Y)
+		if not wasGrounded then
+			if v.Y < -45 then
+				Sfx.play("land")
+			end
+			if v.Y < -20 and Movement.onLand then
+				Movement.onLand(root.Position - Vector3.new(0, 3, 0), -v.Y)
+			end
 		end
 		lastGroundedAt = now
 		usedDouble = false
@@ -207,29 +213,38 @@ local function step()
 	wasGrounded = grounded
 	State.grounded = grounded
 
-	local input = Input.axis()
+	local move = moveWorld()
 	local locked = now < lockUntil
-	local moveDir = if locked then lockDir else input
 	local dashing = now < dashUntil
 	local dodging = now < dodgeUntil
 
-	-- Wall cling
-	local wallDir = 0
-	if State.hasAbility("HasClaws") and not grounded and not dashing and not locked and input ~= 0 then
-		local hit = workspace:Raycast(root.Position, Vector3.new(input * 1.9, 0, 0), wallParams)
-		if hit and not hit.Instance:GetAttribute("NoCling") then
-			wallDir = input
+	-- Face the lock-on target; otherwise the Humanoid turns toward the direction of travel.
+	local target = State.lockTarget
+	if target and target.Parent and not dashing and not dodging then
+		humanoid.AutoRotate = false
+		local to = flat(target.Position - root.Position)
+		if to.Magnitude > 0 then
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + to)
+		end
+	else
+		humanoid.AutoRotate = not (dashing or dodging or wallNormal ~= nil)
+	end
+
+	-- Wall cling: jump into a rough wall while holding toward it.
+	wallNormal = nil
+	if State.hasAbility("HasClaws") and not grounded and not dashing and not locked and move.Magnitude > 0.3 then
+		local hit = workspace:Raycast(root.Position, move.Unit * 2.2, wallParams)
+		if hit and math.abs(hit.Normal.Y) < 0.4 and not hit.Instance:GetAttribute("NoCling") then
+			wallNormal = flat(hit.Normal)
 		end
 	end
-	if wallDir ~= 0 then
+	if wallNormal then
 		usedDouble = false
 		dashReady = true
 		if v.Y < -Config.WALL_SLIDE_SPEED then
-			v = Vector3.new(v.X, -Config.WALL_SLIDE_SPEED, 0)
+			v = Vector3.new(v.X, -Config.WALL_SLIDE_SPEED, v.Z)
 		end
-		State.facing = -wallDir
-	elseif moveDir ~= 0 and not dashing and not dodging then
-		State.facing = moveDir
+		root.CFrame = CFrame.lookAt(root.Position, root.Position + wallNormal)
 	end
 
 	-- Jumping (buffered)
@@ -237,17 +252,20 @@ local function step()
 		local canGroundJump = grounded or (now - lastGroundedAt <= Config.COYOTE_TIME and not jumpedSinceGround)
 		local jumped = false
 		if canGroundJump then
-			v = Vector3.new(v.X, Config.JUMP_VELOCITY, 0)
+			v = Vector3.new(v.X, Config.JUMP_VELOCITY, v.Z)
 			jumpedSinceGround = true
 			jumped = true
-		elseif wallDir ~= 0 then
-			v = Vector3.new(-wallDir * Config.WALL_JUMP_PUSH, Config.JUMP_VELOCITY, 0)
-			Movement.recoil(-wallDir, Config.WALL_JUMP_PUSH, Config.WALL_JUMP_LOCK)
-			State.facing = -wallDir
+			if Movement.onJump then
+				Movement.onJump()
+			end
+		elseif wallNormal then
+			local push = wallNormal * Config.WALL_JUMP_PUSH
+			v = Vector3.new(push.X, Config.JUMP_VELOCITY, push.Z)
+			Movement.shove(push, Config.WALL_JUMP_LOCK)
 			jumped = true
 		elseif State.hasAbility("HasWings") and not usedDouble and not grounded then
 			usedDouble = true
-			v = Vector3.new(v.X, Config.JUMP_VELOCITY * 0.95, 0)
+			v = Vector3.new(v.X, Config.JUMP_VELOCITY * 0.95, v.Z)
 			jumped = true
 			if Movement.onDoubleJump then
 				Movement.onDoubleJump()
@@ -267,7 +285,7 @@ local function step()
 		if v.Y <= 0 then
 			jumpCutArmed = false
 		elseif not Input.jumpHeld then
-			v = Vector3.new(v.X, v.Y * Config.JUMP_CUT, 0)
+			v = Vector3.new(v.X, v.Y * Config.JUMP_CUT, v.Z)
 			jumpCutArmed = false
 		end
 	end
@@ -275,14 +293,14 @@ local function step()
 	-- Dash
 	if now - dashRequestedAt <= 0.1 and State.hasAbility("HasDash") and dashReady and now >= dashCooldownUntil and not locked then
 		dashRequestedAt = -1
-		dashDir = if wallDir ~= 0 then -wallDir else State.facing
-		State.facing = dashDir
+		dashDir = if wallNormal then wallNormal elseif move.Magnitude > 0.2 then move.Unit else State.facingVector
 		dashUntil = now + Config.DASH_TIME
 		dashCooldownUntil = now + Config.DASH_COOLDOWN
 		if not grounded then
 			dashReady = false
 		end
 		dashing = true
+		root.CFrame = CFrame.lookAt(root.Position, root.Position + dashDir)
 		Sfx.play("dash")
 		if Movement.onDash then
 			Movement.onDash(dashDir)
@@ -292,7 +310,7 @@ local function step()
 	-- Sidestep: a quick hop (backwards unless a direction is held) with brief invulnerability.
 	if now - dodgeRequestedAt <= 0.1 and now >= dodgeCooldownUntil and not dashing and not locked then
 		dodgeRequestedAt = -1
-		dodgeDir = if input ~= 0 then input else -State.facing
+		dodgeDir = if move.Magnitude > 0.2 then move.Unit else -State.facingVector
 		dodgeUntil = now + Config.DODGE_TIME
 		dodgeCooldownUntil = now + Config.DODGE_COOLDOWN
 		dodging = true
@@ -305,35 +323,41 @@ local function step()
 
 	local baseSpeed = Config.WALK_SPEED * (if State.hasCharm("swift_mantle") then 1.15 else 1)
 	if dodging then
-		v = Vector3.new(dodgeDir * Config.DODGE_SPEED, if grounded then math.max(v.Y, 8) else v.Y * 0.4, 0)
+		local d = dodgeDir * Config.DODGE_SPEED
+		v = Vector3.new(d.X, if grounded then math.max(v.Y, 8) else v.Y * 0.4, d.Z)
 		humanoid.WalkSpeed = Config.DODGE_SPEED
-		humanoid:Move(Vector3.new(dodgeDir, 0, 0))
+		humanoid:Move(dodgeDir)
+		State.action = "dodge"
 	elseif dashing then
-		v = Vector3.new(dashDir * Config.DASH_SPEED, 0, 0)
+		local d = dashDir * Config.DASH_SPEED
+		v = Vector3.new(d.X, 0, d.Z)
 		humanoid.WalkSpeed = Config.DASH_SPEED
-		humanoid:Move(Vector3.new(dashDir, 0, 0))
+		humanoid:Move(dashDir)
+		State.action = "dash"
 	elseif locked then
-		v = Vector3.new(lockDir * lockSpeed, v.Y, 0)
-		humanoid.WalkSpeed = lockSpeed
-		humanoid:Move(Vector3.new(lockDir, 0, 0))
+		v = Vector3.new(lockVelocity.X, v.Y, lockVelocity.Z)
+		humanoid.WalkSpeed = lockVelocity.Magnitude
+		humanoid:Move(flat(lockVelocity))
+		State.action = nil
 	else
 		humanoid.WalkSpeed = baseSpeed
-		humanoid:Move(Vector3.new(moveDir, 0, 0))
+		humanoid:Move(move)
+		State.action = if wallNormal then "wall" else nil
 	end
 
-	v = Vector3.new(v.X, math.max(v.Y, -Config.MAX_FALL_SPEED), 0)
+	v = Vector3.new(v.X, math.max(v.Y, -Config.MAX_FALL_SPEED), v.Z)
 	root.AssemblyLinearVelocity = v
-	keepPlane(root)
+	State.moveSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
 
-	if grounded and math.abs(v.X) > 12 and now - lastStepDust > 0.22 and Movement.onStep then
+	if grounded and State.moveSpeed > 12 and now - lastStepDust > 0.22 and Movement.onStep then
 		lastStepDust = now
-		Movement.onStep(root.Position - Vector3.new(State.facing * 0.8, 3, 0))
+		Movement.onStep(root.Position - Vector3.new(0, 3, 0) - State.facingVector * 0.8)
 	end
 
 	-- Remember the last safe footing for thorn respawns.
 	if grounded and not dashing and now - lastSafeCheck > 0.2 then
 		lastSafeCheck = now
-		local near = workspace:GetPartBoundsInBox(CFrame.new(root.Position - Vector3.new(0, 2.5, 0)), Vector3.new(7, 5, 6), hazardParams)
+		local near = workspace:GetPartBoundsInBox(CFrame.new(root.Position - Vector3.new(0, 2.5, 0)), Vector3.new(7, 5, 7), hazardParams)
 		if #near == 0 then
 			lastSafe = root.Position
 		end
@@ -344,7 +368,8 @@ local function step()
 		for _, door in doorsFolder:GetChildren() do
 			if door:IsA("BasePart") and door:GetAttribute("Door") then
 				local d = root.Position - door.Position
-				if math.abs(d.X) < door.Size.X / 2 + 0.6 and math.abs(d.Y) < door.Size.Y / 2 then
+				local half = door.Size / 2
+				if math.abs(d.X) < half.X + 0.6 and math.abs(d.Y) < half.Y and math.abs(d.Z) < half.Z then
 					transition(door)
 					break
 				end
@@ -357,7 +382,7 @@ local function onCharacter(character: Model)
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	local root = character:WaitForChild("HumanoidRootPart") :: BasePart
 	State.character, State.humanoid, State.root = character, humanoid, root
-	humanoid.AutoRotate = false
+	humanoid.AutoRotate = true
 	for _, s in {
 		Enum.HumanoidStateType.Climbing,
 		Enum.HumanoidStateType.Swimming,
@@ -367,17 +392,17 @@ local function onCharacter(character: Model)
 	} do
 		humanoid:SetStateEnabled(s, false)
 	end
-	State.facing = 1
 	lastSafe = nil
 	rooted = false
 	refreshFilters()
 	State.freeze("dead", false)
 	State.freeze("hazard", false)
 	State.freeze("door", false)
+	State.lockTarget = nil
 	doorCooldownUntil = os.clock() + 1
 	task.defer(function()
 		if Movement.onTeleport then
-			Movement.onTeleport()
+			Movement.onTeleport(nil)
 		end
 	end)
 end
@@ -394,28 +419,35 @@ function Movement.init()
 	Input.on("jump", function()
 		jumpPressedAt = os.clock()
 	end)
-	Input.on("dodge", function()
-		dodgeRequestedAt = os.clock()
-	end)
 	Input.on("dash", function()
 		dashRequestedAt = os.clock()
 	end)
+	Input.on("dodge", function()
+		dodgeRequestedAt = os.clock()
+	end)
 
-	Net.event("Knockback").OnClientEvent:Connect(function(dirX: number)
+	Net.event("Knockback").OnClientEvent:Connect(function(direction: Vector3)
 		local root = State.root
 		if not root then
 			return
 		end
 		Sfx.play("hurt")
 		dashUntil = 0
-		Movement.recoil(dirX, Config.KNOCKBACK.X, 0.16)
-		root.AssemblyLinearVelocity = Vector3.new(dirX * Config.KNOCKBACK.X, Config.KNOCKBACK.Y, 0)
+		local push = flat(direction) * Config.KNOCKBACK.X
+		Movement.shove(push, 0.16)
+		root.AssemblyLinearVelocity = Vector3.new(push.X, Config.KNOCKBACK.Y, push.Z)
 		flicker()
+		if Movement.onHurt then
+			Movement.onHurt()
+		end
 	end)
 
 	Net.event("HazardRespawn").OnClientEvent:Connect(function()
 		Sfx.play("hurt")
 		State.freeze("hazard", true)
+		if Movement.onHurt then
+			Movement.onHurt()
+		end
 		task.spawn(function()
 			Fade.out(0.2)
 			local root = State.root
@@ -431,9 +463,12 @@ function Movement.init()
 
 	Net.event("Died").OnClientEvent:Connect(function()
 		State.freeze("dead", true)
+		State.dead = true
 		task.spawn(function()
-			Fade.out(1.2, Color3.fromRGB(8, 6, 14))
+			task.wait(1.1)
+			Fade.out(1.0, Color3.fromRGB(8, 6, 14))
 			player.CharacterAdded:Wait()
+			State.dead = false
 			task.wait(0.4)
 			Fade.into(1)
 		end)

@@ -8,12 +8,33 @@ local State = {
 	grounded = false,
 	zone = nil :: number?,
 	bossFight = false,
+	cameraYaw = 0,
+	lockTarget = nil :: BasePart?,
+	-- Animation hints written by Movement / combat and read by the character animator.
+	action = nil :: string?, -- "dash" | "dodge" | "wall" | "heal" | "charge" | nil
+	moveSpeed = 0,
+	facingVector = Vector3.xAxis,
+	talkingTo = nil :: string?,
+	invulnUntil = 0,
+	dead = false,
 	-- Movement is paused while any of these reasons is active (dialogue, transitions, death...).
 	freezes = {} :: { [string]: boolean },
 }
 
 function State.freeze(reason: string, on: boolean)
 	State.freezes[reason] = if on then true else nil
+end
+
+local UI_REASONS = { dialogue = true, charms = true, journal = true, memory = true }
+
+-- True while a menu that needs the mouse cursor is open.
+function State.uiOpen(): boolean
+	for reason in State.freezes do
+		if UI_REASONS[reason] then
+			return true
+		end
+	end
+	return false
 end
 
 function State.frozen(): boolean

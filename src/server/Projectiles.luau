@@ -1,4 +1,5 @@
--- Simple server-simulated projectiles (spores, rocks, webs, light orbs).
+-- Server-simulated hostile projectiles (spores, stones, webs, light orbs, ink) and expanding
+-- shockwave rings that sweep along the floor and must be jumped.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,6 +18,17 @@ type Projectile = {
 	passWalls: boolean,
 }
 
+type Ring = {
+	part: BasePart,
+	center: Vector3,
+	radius: number,
+	speed: number,
+	maxRadius: number,
+	height: number,
+	damage: number,
+	hit: { [Player]: boolean },
+}
+
 export type Options = {
 	position: Vector3,
 	velocity: Vector3,
@@ -29,6 +41,7 @@ export type Options = {
 }
 
 local active: { Projectile } = {}
+local rings: { Ring } = {}
 local folder: Folder
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Include
@@ -47,11 +60,22 @@ function Projectiles.spawn(opts: Options)
 		CanCollide = false,
 		CanQuery = false,
 		CanTouch = false,
+		CastShadow = false,
 		Color = color,
 		Material = Enum.Material.Neon,
 		Parent = folder,
 	})
-	Props.make("PointLight", { Range = 8, Brightness = 1, Color = color, Parent = p })
+	Props.make("PointLight", { Range = 8, Brightness = 1.2, Color = color, Parent = p })
+	Props.make("Trail", {
+		Attachment0 = Props.make("Attachment", { Position = Vector3.new(0, radius * 0.5, 0), Parent = p }),
+		Attachment1 = Props.make("Attachment", { Position = Vector3.new(0, -radius * 0.5, 0), Parent = p }),
+		Color = ColorSequence.new(color),
+		Transparency = NumberSequence.new(0.4, 1),
+		Lifetime = 0.25,
+		LightEmission = 0.8,
+		FaceCamera = true,
+		Parent = p,
+	})
 	table.insert(active, {
 		part = p,
 		velocity = opts.velocity,
@@ -63,16 +87,51 @@ function Projectiles.spawn(opts: Options)
 	})
 end
 
+-- A ring of force expanding from `center` along the floor. Jump it.
+function Projectiles.ring(center: Vector3, speed: number, maxRadius: number, color: Color3?)
+	local p = Props.make("Part", {
+		Name = "Shockwave",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(1.4, 1, 1),
+		CFrame = CFrame.new(center + Vector3.new(0, 0.7, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Color = color or Color3.fromRGB(255, 246, 230),
+		Material = Enum.Material.Neon,
+		Transparency = 0.55,
+		Parent = folder,
+	})
+	table.insert(rings, {
+		part = p,
+		center = center,
+		radius = 1,
+		speed = speed,
+		maxRadius = maxRadius,
+		height = 2.2,
+		damage = 1,
+		hit = {},
+	})
+end
+
 function Projectiles.clear()
 	for _, proj in active do
 		proj.part:Destroy()
 	end
+	for _, ring in rings do
+		ring.part:Destroy()
+	end
 	table.clear(active)
+	table.clear(rings)
 end
 
 function Projectiles.init(mapFolders: { Instance }, damage: (Player, number, Vector3) -> ())
 	folder = Props.make("Folder", { Name = "Projectiles", Parent = workspace })
-	rayParams.FilterDescendantsInstances = mapFolders
+	local include = table.clone(mapFolders)
+	table.insert(include, workspace.Terrain)
+	rayParams.FilterDescendantsInstances = include
 	damageFn = damage
 
 	RunService.Heartbeat:Connect(function(dt)
@@ -92,8 +151,7 @@ function Projectiles.init(mapFolders: { Instance }, damage: (Player, number, Vec
 			local step = proj.velocity * dt
 			local hitWall = false
 			if not proj.passWalls then
-				local result = workspace:Raycast(from, step, rayParams)
-				if result then
+				if workspace:Raycast(from, step, rayParams) then
 					hitWall = true
 				end
 			end
@@ -102,7 +160,7 @@ function Projectiles.init(mapFolders: { Instance }, damage: (Player, number, Vec
 			for _, entry in roots do
 				local root = entry[2] :: BasePart
 				local d = root.Position - to
-				if math.abs(d.X) < proj.radius + 1.1 and math.abs(d.Y) < proj.radius + 2.4 then
+				if math.abs(d.X) < proj.radius + 1.1 and math.abs(d.Z) < proj.radius + 1.1 and math.abs(d.Y) < proj.radius + 2.4 then
 					damageFn(entry[1], proj.damage, to)
 					hitWall = true
 					break
@@ -111,6 +169,26 @@ function Projectiles.init(mapFolders: { Instance }, damage: (Player, number, Vec
 			if hitWall or now > proj.expires then
 				proj.part:Destroy()
 				table.remove(active, i)
+			end
+		end
+		for i = #rings, 1, -1 do
+			local ring = rings[i]
+			ring.radius += ring.speed * dt
+			ring.part.Size = Vector3.new(1.4, ring.radius * 2, ring.radius * 2)
+			ring.part.Transparency = 0.55 + 0.4 * (ring.radius / ring.maxRadius)
+			for _, entry in roots do
+				local player, root = entry[1], entry[2] :: BasePart
+				local d = root.Position - ring.center
+				local flat = Vector3.new(d.X, 0, d.Z).Magnitude
+				-- The wave is a thin band just above the floor: stand clear of it or jump.
+				if not ring.hit[player] and math.abs(flat - ring.radius) < 1.3 and d.Y < ring.height + 3 and d.Y > -2 then
+					ring.hit[player] = true
+					damageFn(player, ring.damage, ring.center)
+				end
+			end
+			if ring.radius >= ring.maxRadius then
+				ring.part:Destroy()
+				table.remove(rings, i)
 			end
 		end
 	end)

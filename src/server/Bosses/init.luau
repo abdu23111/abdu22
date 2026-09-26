@@ -1,9 +1,10 @@
 -- Boss arenas and the fight runtime. Each boss lives in Bosses/Defs as a data table plus a
--- scripted attack loop built from the helpers below (moves, leaps, telegraphs, floor
--- markers, beams, spires, ink tides, projectile volleys). The runtime adds:
---   * cinematic introductions (gates slam, camera pans to the boss, title card)
+-- scripted attack loop built from the helpers below. On the server a boss is an invisible
+-- hitbox; its model's attributes (Rig, Anim, Warn, HitAt) let every client draw and animate
+-- the boss's rig. The runtime adds:
+--   * cinematic introductions (gates slam, camera orbits the boss, title card, a roar)
 --   * phases at health thresholds, each opening with a stagger and roar
---   * readable warnings: bosses glow hot before striking, hazards are marked first
+--   * readable warnings: bosses glow hot and wind up; hazards are marked on the floor first
 --   * a death sequence before rewards are handed out
 
 local Players = game:GetService("Players")
@@ -15,6 +16,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Net = require(Shared.Net)
 local Grid = require(Shared.Grid)
+local Rig = require(Shared.Rig)
 local Damageable = require(script.Parent.Damageable)
 local Projectiles = require(script.Parent.Projectiles)
 local Enemies = require(script.Parent.Enemies)
@@ -35,7 +37,7 @@ for _, module in script:WaitForChild("Defs"):GetChildren() do
 	end
 end
 
-type Hazard = { center: Vector3, size: Vector3, expires: number }
+type Hazard = { cf: CFrame, size: Vector3, expires: number }
 
 type Fight = {
 	info: any,
@@ -49,6 +51,11 @@ type Fight = {
 }
 
 local fights: { Fight } = {}
+
+local function flat(v: Vector3): Vector3
+	local f = Vector3.new(v.X, 0, v.Z)
+	return if f.Magnitude > 1e-4 then f.Unit else Vector3.zero
+end
 
 local function arenaPlayers(info): { Player }
 	local list = {}
@@ -68,32 +75,6 @@ local function setGates(fight: Fight, closed: boolean)
 	for _, gate in fight.info.gates do
 		Props.setGate(gate, closed)
 	end
-end
-
-local function buildModel(def)
-	local model = make("Model", { Name = def.name })
-	local parts = {}
-	local colors = {}
-	for _, spec in def.parts do
-		local p = make("Part", {
-			Shape = spec.shape or Enum.PartType.Block,
-			Size = spec.size,
-			Color = spec.color,
-			Material = if spec.neon then Enum.Material.Neon else Enum.Material.SmoothPlastic,
-			Transparency = spec.transparency or 0,
-			Anchored = true,
-			CanCollide = false,
-			CanTouch = false,
-			CastShadow = false,
-			Parent = model,
-		})
-		table.insert(parts, { part = p, spec = spec })
-		if not spec.neon then
-			colors[p] = spec.color
-		end
-	end
-	model.PrimaryPart = parts[1].part
-	return model, parts, colors
 end
 
 local function cleanup(fight: Fight)
@@ -148,20 +129,37 @@ end
 
 local function createBoss(fight: Fight)
 	local info, def = fight.info, fight.def
-	local model, parts, colors = buildModel(def)
+	local model = make("Model", { Name = def.name })
+	local hitbox = make("Part", {
+		Name = "Hitbox",
+		Anchored = true,
+		CanCollide = false,
+		CanTouch = false,
+		Transparency = 1,
+		Size = def.size,
+		Parent = model,
+	})
+	model.PrimaryPart = hitbox
+	model:SetAttribute("Rig", fight.info.id)
+	model:SetAttribute("Anim", "idle")
+	model:SetAttribute("Anchor", def.size.Y / 2)
+	model:SetAttribute("Boss", true)
+
 	local rng = Random.new()
+	local half = math.max(def.size.X, def.size.Z) / 2
 	local b: any = {
 		rng = rng,
 		model = model,
-		parts = parts,
-		colors = colors,
+		hitbox = hitbox,
 		size = def.size,
-		minX = info.minX + def.size.X / 2,
-		maxX = info.maxX - def.size.X / 2,
+		minX = info.minX + half,
+		maxX = info.maxX - half,
+		minZ = -info.zHalf + half,
+		maxZ = info.zHalf - half,
 		floorY = info.floorY,
 		ceilY = info.ceilY,
 		groundY = info.floorY + def.size.Y / 2,
-		dir = -1,
+		facing = Vector3.new(-1, 0, 0),
 		hp = def.hp,
 		phase = 1,
 		pendingPhase = nil,
@@ -169,7 +167,7 @@ local function createBoss(fight: Fight)
 		cancelled = false,
 		warning = false,
 		hidden = false,
-		walk = 0,
+		anim = "idle",
 	}
 	b.position = if def.flying then Vector3.new(info.position.X, info.position.Y, 0) else Vector3.new(info.position.X, b.groundY, 0)
 
@@ -185,6 +183,19 @@ local function createBoss(fight: Fight)
 		return inst
 	end
 
+	function b.setAnim(anim: string, restart: boolean?)
+		if b.anim ~= anim or restart then
+			b.anim = anim
+			model:SetAttribute("Anim", anim)
+			model:SetAttribute("AnimAt", os.clock())
+		end
+	end
+
+	local function setWarn(on: boolean)
+		b.warning = on
+		model:SetAttribute("Warn", on)
+	end
+
 	local function rawWait(t: number)
 		local elapsed = 0
 		while elapsed < t do
@@ -194,27 +205,19 @@ local function createBoss(fight: Fight)
 			end
 		end
 	end
+	b.rawWait = rawWait
 
 	local function stagger(phase: number)
 		b.staggering = true
-		b.warning = true
-		local base = b.position
-		local elapsed = 0
-		while elapsed < 1.1 do
-			elapsed += RunService.Heartbeat:Wait()
-			if b.cancelled then
-				error(CANCEL)
-			end
-			b.position = base + Vector3.new(math.sin(elapsed * 60) * 0.25, 0, 0)
-		end
-		b.position = base
-		b.warning = false
+		b.setAnim("stagger", true)
+		rawWait(1.1)
 		b.shake(1)
 		Enemies.burst(b.position, Color3.fromRGB(255, 255, 255), 30)
 		if def.onPhase then
 			def.onPhase(b, phase)
 		end
 		b.staggering = false
+		b.setAnim("idle")
 	end
 
 	function b.step(): number
@@ -229,11 +232,18 @@ local function createBoss(fight: Fight)
 		end
 		return dt
 	end
-	function b.wait(t: number)
+	function b.wait(t: number, anim: string?)
+		if anim then
+			b.setAnim(anim)
+		end
 		local elapsed = 0
 		while elapsed < t do
 			elapsed += b.step()
 		end
+	end
+	-- Pause between attacks, idling.
+	function b.rest(t: number)
+		b.wait(b.pace(t), "idle")
 	end
 	function b.phase2(): boolean
 		return b.phase >= 2
@@ -242,11 +252,14 @@ local function createBoss(fight: Fight)
 	function b.pace(t: number): number
 		return t * (1 - 0.18 * (b.phase - 1))
 	end
-	function b.clampX(x: number): number
-		return math.clamp(x, b.minX, b.maxX)
+	function b.clamp(p: Vector3): Vector3
+		return Vector3.new(math.clamp(p.X, b.minX, b.maxX), p.Y, math.clamp(p.Z, b.minZ, b.maxZ))
 	end
-	function b.randomX(): number
-		return rng:NextNumber(b.minX, b.maxX)
+	function b.randomPoint(y: number?): Vector3
+		return Vector3.new(rng:NextNumber(b.minX, b.maxX), y or b.groundY, rng:NextNumber(b.minZ, b.maxZ))
+	end
+	function b.center(): Vector3
+		return Vector3.new((b.minX + b.maxX) / 2, b.groundY, (b.minZ + b.maxZ) / 2)
 	end
 	function b.targetPos(): Vector3
 		local best, bestD = nil, math.huge
@@ -259,16 +272,26 @@ local function createBoss(fight: Fight)
 				end
 			end
 		end
-		return best or Vector3.new((b.minX + b.maxX) / 2, b.groundY, 0)
+		return best or b.center()
+	end
+	-- Where the player stands, projected onto the floor.
+	function b.targetGround(): Vector3
+		local t = b.targetPos()
+		return Vector3.new(t.X, b.groundY, t.Z)
 	end
 	function b.faceTarget()
-		b.dir = if b.targetPos().X >= b.position.X then 1 else -1
-	end
-	function b.moveTo(x: number, y: number, speed: number)
-		local target = Vector3.new(x, y, 0)
-		if target.X ~= b.position.X then
-			b.dir = if target.X > b.position.X then 1 else -1
+		local d = flat(b.targetPos() - b.position)
+		if d.Magnitude > 0 then
+			b.facing = d
 		end
+	end
+	function b.moveTo(target: Vector3, speed: number, anim: string?)
+		target = b.clamp(target)
+		local dir = flat(target - b.position)
+		if dir.Magnitude > 0 then
+			b.facing = dir
+		end
+		b.setAnim(anim or (if speed >= 40 then "attack" else "move"))
 		while (target - b.position).Magnitude > 0.05 do
 			local dt = b.step()
 			local delta = target - b.position
@@ -280,33 +303,35 @@ local function createBoss(fight: Fight)
 			end
 		end
 	end
-	function b.leap(targetX: number, height: number, duration: number)
+	function b.leap(target: Vector3, height: number, duration: number)
 		local fromPos = b.position
-		local toX = b.clampX(targetX)
-		b.dir = if toX >= fromPos.X then 1 else -1
+		local to = b.clamp(Vector3.new(target.X, b.groundY, target.Z))
+		local dir = flat(to - fromPos)
+		if dir.Magnitude > 0 then
+			b.facing = dir
+		end
+		b.setAnim("leap")
 		local t = 0
 		while t < duration do
 			t += b.step()
 			local a = math.min(1, t / duration)
-			local x = fromPos.X + (toX - fromPos.X) * a
-			local y = fromPos.Y + (b.groundY - fromPos.Y) * a + math.sin(a * math.pi) * height
-			b.position = Vector3.new(x, y, 0)
+			local p = fromPos:Lerp(to, a)
+			b.position = Vector3.new(p.X, fromPos.Y + (to.Y - fromPos.Y) * a + math.sin(a * math.pi) * height, p.Z)
 		end
-		b.position = Vector3.new(toX, b.groundY, 0)
+		b.position = to
+		b.setAnim("slam", true)
 	end
-	-- Wind-up: the boss trembles and glows hot, so every attack can be read in advance.
+	-- Wind-up: the boss glows hot and coils, so every attack can be read in advance.
 	function b.telegraph(t: number)
-		b.warning = true
-		local base = b.position
+		setWarn(true)
+		b.setAnim("windup")
 		local ok, err = pcall(function()
 			local elapsed = 0
 			while elapsed < t do
 				elapsed += b.step()
-				b.position = base + Vector3.new(math.sin(elapsed * 70) * 0.18, 0, 0)
 			end
 		end)
-		b.position = base
-		b.warning = false
+		setWarn(false)
 		if not ok then
 			error(err)
 		end
@@ -318,6 +343,9 @@ local function createBoss(fight: Fight)
 	end
 	function b.projectile(position: Vector3, velocity: Vector3, opts)
 		opts = opts or {}
+		if not opts.quiet then
+			b.setAnim("shoot", true)
+		end
 		Projectiles.spawn({
 			position = position,
 			velocity = velocity,
@@ -328,25 +356,28 @@ local function createBoss(fight: Fight)
 			passWalls = opts.passWalls,
 		})
 	end
-	function b.shockwaves(speed: number, onlyDir: number?)
-		for _, d in { -1, 1 } do
-			if not onlyDir or onlyDir == d then
-				Projectiles.spawn({
-					position = Vector3.new(b.position.X + d * b.size.X / 2, b.floorY + 1.1, 0),
-					velocity = Vector3.new(d * speed, 0, 0),
-					color = Color3.fromRGB(255, 255, 255),
-					radius = 1.1,
-					lifetime = 2.2,
-				})
-			end
+	-- Fire `count` projectiles fanned horizontally around `dir`.
+	function b.fan(origin: Vector3, dir: Vector3, count: number, spread: number, speed: number, opts)
+		local base = math.atan2(dir.Z, dir.X)
+		local pitch = math.asin(math.clamp(dir.Unit.Y, -1, 1))
+		for i = 1, count do
+			local a = base + (i - (count + 1) / 2) * spread
+			local v = Vector3.new(math.cos(a) * math.cos(pitch), math.sin(pitch), math.sin(a) * math.cos(pitch)) * speed
+			b.projectile(origin, v, opts)
 		end
+	end
+	-- A ring of force expanding along the floor from the boss.
+	function b.shockwaves(speed: number, maxRadius: number?)
+		b.setAnim("slam", true)
+		Projectiles.ring(Vector3.new(b.position.X, b.floorY, b.position.Z), speed, maxRadius or 40)
 	end
 	function b.dust(at: Vector3)
 		Enemies.burst(at + Vector3.new(0, 0.5, 0), Color3.fromRGB(180, 170, 150), 24)
 	end
-	-- A glowing floor strip (and faint column) marking where something is about to land.
-	function b.marker(x: number, width: number, t: number)
-		local strip = make("Part", {
+	-- A glowing disc on the floor marking where something is about to land.
+	function b.marker(at: Vector3, radius: number, t: number)
+		local disc = make("Part", {
+			Shape = Enum.PartType.Cylinder,
 			Anchored = true,
 			CanCollide = false,
 			CanQuery = false,
@@ -354,30 +385,17 @@ local function createBoss(fight: Fight)
 			CastShadow = false,
 			Material = Enum.Material.Neon,
 			Color = WARN,
-			Transparency = 0.25,
-			Size = Vector3.new(width, 0.35, Config.DEPTH + 0.6),
-			Position = Vector3.new(x, b.floorY + 0.2, 0),
+			Transparency = 0.35,
+			Size = Vector3.new(0.3, radius * 2, radius * 2),
+			CFrame = CFrame.new(at.X, b.floorY + 0.2, at.Z) * CFrame.Angles(0, 0, math.rad(90)),
 			Parent = workspace,
 		})
-		local column = make("Part", {
-			Anchored = true,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-			CastShadow = false,
-			Material = Enum.Material.Neon,
-			Color = WARN,
-			Transparency = 0.88,
-			Size = Vector3.new(width * 0.8, 16, 0.2),
-			Position = Vector3.new(x, b.floorY + 8, 1),
-			Parent = workspace,
-		})
-		temp(strip, t)
-		temp(column, t)
-		TweenService:Create(strip, TweenInfo.new(t / 3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.7 }):Play()
+		temp(disc, t)
+		TweenService:Create(disc, TweenInfo.new(t / 3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.75 }):Play()
 	end
-	-- A thin warning line across the arena at height y.
-	function b.beamWarn(y: number, t: number)
+	-- A thin warning line from `from` along `dir`.
+	function b.beamWarn(from: Vector3, dir: Vector3, length: number, t: number)
+		local mid = from + dir.Unit * length / 2
 		local line = make("Part", {
 			Anchored = true,
 			CanCollide = false,
@@ -385,38 +403,38 @@ local function createBoss(fight: Fight)
 			CanTouch = false,
 			Material = Enum.Material.Neon,
 			Color = WARN,
-			Transparency = 0.45,
-			Size = Vector3.new(fight.info.maxX - fight.info.minX, 0.25, 0.25),
-			Position = Vector3.new((fight.info.minX + fight.info.maxX) / 2, y, 1),
+			Transparency = 0.4,
+			Size = Vector3.new(0.3, 0.3, length),
+			CFrame = CFrame.lookAt(mid, mid + dir),
 			Parent = workspace,
 		})
 		temp(line, t)
 	end
-	function b.hazard(center: Vector3, size: Vector3, t: number)
-		table.insert(fight.hazards, { center = center, size = size, expires = os.clock() + t })
+	function b.hazard(cf: CFrame, size: Vector3, t: number)
+		table.insert(fight.hazards, { cf = cf, size = size, expires = os.clock() + t })
 	end
-	-- A blazing horizontal beam across the arena.
-	function b.beam(y: number, t: number)
-		local width = fight.info.maxX - fight.info.minX
-		local center = Vector3.new((fight.info.minX + fight.info.maxX) / 2, y, 0)
+	-- A blazing beam from `from` along `dir`.
+	function b.beam(from: Vector3, dir: Vector3, length: number, t: number, color: Color3?)
+		local mid = from + dir.Unit * length / 2
+		local cf = CFrame.lookAt(mid, mid + dir)
 		local beam = make("Part", {
 			Anchored = true,
 			CanCollide = false,
 			CanQuery = false,
 			CanTouch = false,
 			Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(255, 220, 255),
+			Color = color or Color3.fromRGB(255, 220, 255),
 			Transparency = 0.1,
-			Size = Vector3.new(width, 2.2, 2.2),
-			Position = center,
+			Size = Vector3.new(2.2, 2.2, length),
+			CFrame = cf,
 			Parent = workspace,
 		})
-		make("PointLight", { Range = 30, Brightness = 3, Color = Color3.fromRGB(255, 180, 255), Parent = beam })
+		make("PointLight", { Range = 30, Brightness = 3, Color = beam.Color, Parent = beam })
 		temp(beam, t)
-		b.hazard(center, Vector3.new(width, 2.2, 4), t)
+		b.hazard(cf, Vector3.new(2.2, 2.2, length), t)
 	end
 	-- A crystal spire bursting from the floor.
-	function b.spire(x: number, height: number, t: number)
+	function b.spire(at: Vector3, height: number, t: number)
 		local spire = make("Part", {
 			Anchored = true,
 			CanCollide = false,
@@ -425,22 +443,22 @@ local function createBoss(fight: Fight)
 			Material = Enum.Material.Neon,
 			Color = Color3.fromRGB(240, 160, 255),
 			Transparency = 0.1,
-			Size = Vector3.new(2.2, height, 2.2),
-			CFrame = CFrame.new(x, b.floorY - height / 2, 0) * CFrame.Angles(0, math.rad(45), 0),
+			Size = Vector3.new(2.4, height, 2.4),
+			CFrame = CFrame.new(at.X, b.floorY - height / 2, at.Z) * CFrame.Angles(0, math.rad(45), 0),
 			Parent = workspace,
 		})
 		temp(spire, t + 0.3)
-		TweenService:Create(spire, TweenInfo.new(0.12, Enum.EasingStyle.Back), { CFrame = CFrame.new(x, b.floorY + height / 2, 0) * CFrame.Angles(0, math.rad(45), 0) }):Play()
+		TweenService:Create(spire, TweenInfo.new(0.12, Enum.EasingStyle.Back), { CFrame = CFrame.new(at.X, b.floorY + height / 2, at.Z) * CFrame.Angles(0, math.rad(45), 0) }):Play()
 		task.delay(t, function()
 			if spire.Parent then
 				TweenService:Create(spire, TweenInfo.new(0.3), { Transparency = 1 }):Play()
 			end
 		end)
-		b.hazard(Vector3.new(x, b.floorY + height / 2, 0), Vector3.new(2.2, height, 4), t)
+		b.hazard(CFrame.new(at.X, b.floorY + height / 2, at.Z), Vector3.new(2.4, height, 2.4), t)
 	end
 	-- Flood the arena floor with ink up to `top` for a while (runs alongside other attacks).
 	function b.inkTide(top: number, duration: number)
-		local width = fight.info.maxX - fight.info.minX
+		local sizeX, sizeZ = fight.info.maxX - fight.info.minX, fight.info.zHalf * 2
 		local cx = (fight.info.minX + fight.info.maxX) / 2
 		local ink = make("Part", {
 			Anchored = true,
@@ -451,26 +469,24 @@ local function createBoss(fight: Fight)
 			Color = Color3.fromRGB(8, 14, 18),
 			Reflectance = 0.3,
 			Transparency = 0.1,
-			Size = Vector3.new(width, 0.2, Config.DEPTH + 1),
+			Size = Vector3.new(sizeX, 0.2, sizeZ),
 			Position = Vector3.new(cx, b.floorY, 0),
 			Parent = workspace,
 		})
 		temp(ink)
 		local height = top - b.floorY
-		for _, player in Players:GetPlayers() do
-			if fight.participants[player] then
-				PlayerService.notify(player, "The ink is rising!", "Get off the floor.", "info")
-			end
+		for player in fight.participants do
+			PlayerService.notify(player, "The ink is rising!", "Get off the floor.", "info")
 		end
-		TweenService:Create(ink, TweenInfo.new(1, Enum.EasingStyle.Sine), { Size = Vector3.new(width, height, Config.DEPTH + 1), Position = Vector3.new(cx, b.floorY + height / 2, 0) }):Play()
+		TweenService:Create(ink, TweenInfo.new(1, Enum.EasingStyle.Sine), { Size = Vector3.new(sizeX, height, sizeZ), Position = Vector3.new(cx, b.floorY + height / 2, 0) }):Play()
 		task.delay(1, function()
 			if fight.boss == b and not b.cancelled then
-				b.hazard(Vector3.new(cx, b.floorY + height / 2, 0), Vector3.new(width, height, 4), duration)
+				b.hazard(CFrame.new(cx, b.floorY + height / 2, 0), Vector3.new(sizeX, height, sizeZ), duration)
 			end
 		end)
 		task.delay(1 + duration, function()
 			if ink.Parent then
-				TweenService:Create(ink, TweenInfo.new(0.8), { Size = Vector3.new(width, 0.2, Config.DEPTH + 1), Position = Vector3.new(cx, b.floorY, 0) }):Play()
+				TweenService:Create(ink, TweenInfo.new(0.8), { Size = Vector3.new(sizeX, 0.2, sizeZ), Position = Vector3.new(cx, b.floorY, 0) }):Play()
 				task.delay(0.9, function()
 					if ink.Parent then
 						ink:Destroy()
@@ -482,12 +498,15 @@ local function createBoss(fight: Fight)
 	-- Slip out of sight (beneath the floor) and back.
 	function b.hide()
 		b.hidden = true
-		b.position = Vector3.new(b.position.X, b.floorY - 40, 0)
+		b.setAnim("vanish", true)
+		b.wait(0.25)
+		b.position = Vector3.new(b.position.X, b.floorY - 40, b.position.Z)
 	end
 	function b.appear(position: Vector3)
 		b.position = position
 		b.hidden = false
 		b.dust(position)
+		b.setAnim("idle")
 	end
 	function b.line(from: Vector3, to: Vector3, t: number)
 		local mid = (from + to) / 2
@@ -510,46 +529,12 @@ local function createBoss(fight: Fight)
 			error(err)
 		end
 	end
-	b.rawWait = rawWait
 	return b
 end
 
-local function placeBoss(b, now: number, dt: number)
-	local moved = math.abs(b.position.X - (b.lastX or b.position.X))
-	b.lastX = b.position.X
-	b.walk += moved * 0.9
-	for _, entry in b.parts do
-		local spec = entry.spec
-		local o = spec.offset
-		local rz = (spec.rz or 0) * b.dir
-		local dy = 0
-		if spec.flap then
-			rz += math.sin(now * 9) * spec.flap
-		end
-		if spec.anim == "breath" then
-			dy = math.sin(now * 2.2) * 0.15
-		elseif spec.anim == "leg" then
-			rz += math.sin(b.walk) * 0.35
-		elseif spec.anim == "legB" then
-			rz -= math.sin(b.walk) * 0.35
-		elseif spec.anim == "cape" then
-			rz += math.sin(now * 3) * 0.08 - math.clamp(moved / math.max(dt, 1e-3) / 200, 0, 0.3) * b.dir
-		elseif spec.anim == "book" then
-			dy = math.sin(now * 3) * 0.3
-		end
-		entry.part.CFrame = CFrame.new(b.position + Vector3.new(o.X * b.dir, o.Y + dy, o.Z)) * CFrame.Angles(0, 0, rz)
-	end
-	if b.warning then
-		local pulse = 0.3 + 0.25 * math.sin(now * 30)
-		for p, c in b.colors do
-			p.Color = c:Lerp(WARN, pulse)
-		end
-		b.tinted = true
-	elseif b.tinted then
-		b.tinted = false
-		for p, c in b.colors do
-			p.Color = c
-		end
+local function placeBoss(b)
+	if b.hitbox then
+		b.hitbox.CFrame = Rig.frame(b.position, b.facing)
 	end
 end
 
@@ -559,25 +544,26 @@ local function dyingSequence(fight: Fight, b)
 	fight.stateFolder:SetAttribute("Health", 0)
 	table.clear(fight.hazards)
 	Projectiles.clear()
+	b.model:SetAttribute("Warn", false)
+	b.setAnim("death", true)
 	local def = fight.def
 	for player in fight.participants do
 		Net.event("Flash"):FireClient(player, 0.6)
 		Net.event("CameraShake"):FireClient(player, 1.2)
 	end
 	task.spawn(function()
-		for i = 1, 8 do
-			Enemies.burst(b.position + Vector3.new(math.random(-3, 3), math.random(-2, 3), 0), Color3.fromRGB(255, 255, 255), 14)
-			for p in b.colors do
-				p.Color = if i % 2 == 0 then Color3.new(1, 1, 1) else b.colors[p]
-			end
-			task.wait(0.18)
+		for _ = 1, 8 do
+			Enemies.burst(b.position + Vector3.new(math.random(-3, 3), math.random(-2, 3), math.random(-3, 3)), Color3.fromRGB(255, 255, 255), 14)
+			task.wait(0.2)
 		end
+		b.model:SetAttribute("Dead", true)
 		Enemies.burst(b.position, Color3.fromRGB(255, 255, 255), 60)
 		Enemies.burst(b.position, Color3.fromRGB(120, 220, 255), 40)
 		for player in fight.participants do
 			Net.event("AreaTitle"):FireClient(player, def.name, "has fallen", "victory")
 			Net.event("CameraShake"):FireClient(player, 1)
 		end
+		task.wait(0.1)
 		endFight(fight, true)
 	end)
 end
@@ -590,10 +576,11 @@ local function startFight(fight: Fight, players: { Player })
 
 	local b = createBoss(fight)
 	fight.boss = b
+	b.faceTarget()
 	fight.stateFolder:SetAttribute("Health", b.hp)
 	fight.stateFolder:SetAttribute("MaxHealth", def.hp)
 	fight.stateFolder:SetAttribute("Active", true)
-	placeBoss(b, os.clock(), 1 / 60)
+	placeBoss(b)
 	b.model.Parent = workspace:FindFirstChild("Enemies")
 
 	for _, p in players do
@@ -608,18 +595,7 @@ local function startFight(fight: Fight, players: { Player })
 			end
 			b.hp -= damage
 			fight.stateFolder:SetAttribute("Health", math.max(0, b.hp))
-			if not b.warning then
-				for p in b.colors do
-					p.Color = Color3.new(1, 1, 1)
-				end
-				task.delay(0.07, function()
-					if not b.warning then
-						for p, c in b.colors do
-							p.Color = c
-						end
-					end
-				end)
-			end
+			b.model:SetAttribute("HitAt", os.clock())
 			if b.hp <= 0 then
 				dyingSequence(fight, b)
 				return true
@@ -639,16 +615,15 @@ local function startFight(fight: Fight, players: { Player })
 	task.spawn(function()
 		local ok, err = pcall(function()
 			-- Introduction: a roar once the camera arrives, then the fight begins.
-			b.rawWait(Config.BOSS_INTRO_TIME * 0.45)
-			b.warning = true
+			b.rawWait(Config.BOSS_INTRO_TIME * 0.35)
+			b.setAnim("roar", true)
 			b.shake(0.9)
 			Enemies.burst(b.position, Color3.fromRGB(255, 255, 255), 20)
-			b.rawWait(Config.BOSS_INTRO_TIME * 0.35)
-			b.warning = false
-			b.rawWait(Config.BOSS_INTRO_TIME * 0.2)
+			b.rawWait(Config.BOSS_INTRO_TIME * 0.65)
 			if fight.state == "intro" then
 				fight.state = "fighting"
 			end
+			b.setAnim("idle")
 			b.wait(0.4)
 			def.run(b)
 		end)
@@ -685,7 +660,7 @@ function Bosses.init(infos, playerService)
 		end
 	end
 
-	RunService.Heartbeat:Connect(function(dt)
+	RunService.Heartbeat:Connect(function()
 		local now = os.clock()
 		for _, fight in fights do
 			if fight.state == "idle" then
@@ -711,6 +686,7 @@ function Bosses.init(infos, playerService)
 						table.remove(fight.hazards, i)
 					end
 				end
+				placeBoss(b)
 				local anyone = false
 				for player in fight.participants do
 					local root = PlayerService.rootOf(player)
@@ -718,15 +694,15 @@ function Bosses.init(infos, playerService)
 					if alive and root and Grid.zoneAt(root.Position) == fight.info.zone then
 						anyone = true
 						if fight.state == "fighting" then
-							local p = root.Position
-							local d = p - b.position
-							if not b.hidden and math.abs(d.X) < b.size.X / 2 + 0.9 and math.abs(d.Y) < b.size.Y / 2 + 2.4 then
+							local half = b.size / 2
+							local p = b.hitbox.CFrame:PointToObjectSpace(root.Position)
+							if not b.hidden and math.abs(p.X) < half.X + 0.9 and math.abs(p.Z) < half.Z + 0.9 and math.abs(p.Y) < half.Y + 2.4 then
 								PlayerService.damage(player, 1, b.position)
 							end
 							for _, hz in fight.hazards do
-								local h = p - hz.center
-								if math.abs(h.X) < hz.size.X / 2 + 0.9 and math.abs(h.Y) < hz.size.Y / 2 + 2.4 then
-									PlayerService.damage(player, 1, hz.center)
+								local h = hz.cf:PointToObjectSpace(root.Position)
+								if math.abs(h.X) < hz.size.X / 2 + 0.9 and math.abs(h.Y) < hz.size.Y / 2 + 2.4 and math.abs(h.Z) < hz.size.Z / 2 + 0.9 then
+									PlayerService.damage(player, 1, hz.cf.Position)
 									break
 								end
 							end
@@ -737,8 +713,6 @@ function Bosses.init(infos, playerService)
 				end
 				if not anyone and fight.state ~= "dying" then
 					endFight(fight, false)
-				else
-					placeBoss(b, now, dt)
 				end
 			end
 		end

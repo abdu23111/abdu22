@@ -1,20 +1,20 @@
--- Keyboard / gamepad / touch input, exposed as a held-state table plus action callbacks.
+-- Keyboard / mouse / gamepad / touch input for a third-person action game:
+-- a 2D move stick, camera look deltas, held buttons and action callbacks.
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 
 local Input = {
-	left = false,
-	right = false,
-	up = false,
-	down = false,
 	jumpHeld = false,
 	focusHeld = false,
 	attackHeld = false,
-	stickX = 0,
-	stickY = 0,
+	stick = Vector2.zero, -- gamepad left stick
+	lookStick = Vector2.zero, -- gamepad right stick
+	touchMove = Vector2.zero,
+	keys = {} :: { [Enum.KeyCode]: boolean },
 }
 
+local lookDelta = Vector2.zero
 local listeners: { [string]: { (any) -> () } } = {}
 
 function Input.on(action: string, fn: (any) -> ())
@@ -29,67 +29,68 @@ local function fire(action: string, ...)
 end
 Input.fire = fire
 
-function Input.axis(): number
-	local x = (if Input.right then 1 else 0) - (if Input.left then 1 else 0)
-	if x == 0 and math.abs(Input.stickX) > 0.35 then
-		x = math.sign(Input.stickX)
+-- Movement as (right, forward), each -1..1.
+function Input.move(): Vector2
+	local k = Input.keys
+	local x = (if k[Enum.KeyCode.D] or k[Enum.KeyCode.Right] then 1 else 0) - (if k[Enum.KeyCode.A] or k[Enum.KeyCode.Left] then 1 else 0)
+	local y = (if k[Enum.KeyCode.W] or k[Enum.KeyCode.Up] then 1 else 0) - (if k[Enum.KeyCode.S] or k[Enum.KeyCode.Down] then 1 else 0)
+	local v = Vector2.new(x, y)
+	if Input.stick.Magnitude > 0.15 then
+		v = Input.stick
+	elseif Input.touchMove.Magnitude > 0.1 then
+		v = Input.touchMove
 	end
-	return x
+	if v.Magnitude > 1 then
+		v = v.Unit
+	end
+	return v
 end
 
+-- Camera look since the last call (radians-ish units; the camera scales them).
+function Input.consumeLook(): Vector2
+	local d = lookDelta
+	lookDelta = Vector2.zero
+	return d
+end
+
+-- Kept for compatibility with older combat code; aim is automatic in 3D.
 function Input.lookUp(): boolean
-	return Input.up or Input.stickY > 0.6
+	return false
 end
-
 function Input.lookDown(): boolean
-	return Input.down or Input.stickY < -0.6
+	return false
 end
 
-local HOLD = {
-	[Enum.KeyCode.A] = "left",
-	[Enum.KeyCode.Left] = "left",
-	[Enum.KeyCode.DPadLeft] = "left",
-	[Enum.KeyCode.D] = "right",
-	[Enum.KeyCode.Right] = "right",
-	[Enum.KeyCode.DPadRight] = "right",
-	[Enum.KeyCode.W] = "up",
-	[Enum.KeyCode.Up] = "up",
-	[Enum.KeyCode.DPadUp] = "up",
-	[Enum.KeyCode.S] = "down",
-	[Enum.KeyCode.Down] = "down",
-	[Enum.KeyCode.DPadDown] = "down",
-}
-
-local JUMP = { [Enum.KeyCode.Space] = true, [Enum.KeyCode.Z] = true, [Enum.KeyCode.ButtonA] = true }
-local ATTACK = { [Enum.KeyCode.J] = true, [Enum.KeyCode.X] = true, [Enum.KeyCode.ButtonX] = true }
-local DASH = { [Enum.KeyCode.LeftShift] = true, [Enum.KeyCode.L] = true, [Enum.KeyCode.C] = true, [Enum.KeyCode.ButtonR1] = true, [Enum.KeyCode.ButtonB] = true }
-local FOCUS = { [Enum.KeyCode.F] = true, [Enum.KeyCode.K] = true, [Enum.KeyCode.ButtonL1] = true }
-local DODGE = { [Enum.KeyCode.Q] = true, [Enum.KeyCode.ButtonL2] = true }
+local JUMP = { [Enum.KeyCode.Space] = true, [Enum.KeyCode.ButtonA] = true }
+local ATTACK = { [Enum.KeyCode.J] = true, [Enum.KeyCode.ButtonX] = true }
+local DASH = { [Enum.KeyCode.LeftShift] = true, [Enum.KeyCode.ButtonB] = true, [Enum.KeyCode.ButtonR1] = true }
+local FOCUS = { [Enum.KeyCode.F] = true, [Enum.KeyCode.ButtonL1] = true }
+local DODGE = { [Enum.KeyCode.Q] = true, [Enum.KeyCode.C] = true, [Enum.KeyCode.ButtonL2] = true }
 local BOLT = { [Enum.KeyCode.R] = true, [Enum.KeyCode.ButtonR2] = true }
 local MAP = { [Enum.KeyCode.M] = true, [Enum.KeyCode.ButtonSelect] = true }
+local LOCK = { [Enum.KeyCode.T] = true, [Enum.KeyCode.ButtonR3] = true }
 
 local function press(key: Enum.KeyCode, down: boolean)
-	local hold = HOLD[key]
-	if hold then
-		(Input :: any)[hold] = down
-	end
+	Input.keys[key] = down or nil
 	if JUMP[key] then
 		Input.jumpHeld = down
 		fire(if down then "jump" else "jumpRelease")
 	elseif ATTACK[key] then
 		Input.attackHeld = down
 		fire(if down then "attack" else "attackRelease")
+	elseif DASH[key] and down then
+		fire("dash")
+	elseif FOCUS[key] then
+		Input.focusHeld = down
+		fire(if down then "focusStart" else "focusEnd")
 	elseif DODGE[key] and down then
 		fire("dodge")
 	elseif BOLT[key] and down then
 		fire("bolt")
 	elseif MAP[key] and down then
 		fire("map")
-	elseif DASH[key] and down then
-		fire("dash")
-	elseif FOCUS[key] then
-		Input.focusHeld = down
-		fire(if down then "focusStart" else "focusEnd")
+	elseif LOCK[key] and down then
+		fire("lock")
 	elseif key == Enum.KeyCode.Tab and down then
 		fire("charms")
 	elseif key == Enum.KeyCode.H and down then
@@ -98,17 +99,21 @@ local function press(key: Enum.KeyCode, down: boolean)
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	local t = input.UserInputType
+	if t == Enum.UserInputType.MouseButton1 then
 		if not processed then
 			Input.attackHeld = true
 			fire("attack")
 		end
 		return
-	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+	elseif t == Enum.UserInputType.MouseButton2 then
 		if not processed then
 			Input.focusHeld = true
 			fire("focusStart")
 		end
+		return
+	elseif t == Enum.UserInputType.MouseButton3 then
+		fire("lock")
 		return
 	end
 	if processed and input.KeyCode ~= Enum.KeyCode.ButtonA then
@@ -118,13 +123,14 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	local t = input.UserInputType
+	if t == Enum.UserInputType.MouseButton1 then
 		if Input.attackHeld then
 			Input.attackHeld = false
 			fire("attackRelease")
 		end
 		return
-	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+	elseif t == Enum.UserInputType.MouseButton2 then
 		Input.focusHeld = false
 		fire("focusEnd")
 		return
@@ -133,25 +139,30 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input.KeyCode == Enum.KeyCode.Thumbstick1 then
-		Input.stickX = input.Position.X
-		Input.stickY = input.Position.Y
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+			lookDelta += Vector2.new(input.Delta.X, input.Delta.Y)
+		end
+	elseif input.KeyCode == Enum.KeyCode.Thumbstick1 then
+		Input.stick = Vector2.new(input.Position.X, input.Position.Y)
+	elseif input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		Input.lookStick = Vector2.new(input.Position.X, -input.Position.Y)
 	end
 end)
 
 -- Clear held keys when the window loses focus so the character doesn't run away.
 UserInputService.WindowFocusReleased:Connect(function()
-	Input.left, Input.right, Input.up, Input.down = false, false, false, false
+	table.clear(Input.keys)
 	Input.jumpHeld, Input.focusHeld, Input.attackHeld = false, false, false
 end)
 
--- ===== Touch controls =====
+-- ===== Touch: a floating joystick on the left, camera drag on the right, action buttons =====
 
 local function touchButton(gui: ScreenGui, text: string, position: UDim2, size: number, onDown: () -> (), onUp: (() -> ())?)
 	local button = Instance.new("TextButton")
 	button.Text = text
 	button.Font = Enum.Font.GothamBold
-	button.TextSize = 22
+	button.TextSize = 18
 	button.TextColor3 = Color3.fromRGB(235, 235, 245)
 	button.BackgroundColor3 = Color3.fromRGB(20, 22, 34)
 	button.BackgroundTransparency = 0.35
@@ -187,21 +198,70 @@ if UserInputService.TouchEnabled then
 	gui.IgnoreGuiInset = true
 	gui.DisplayOrder = 5
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-	local function hold(field: string)
-		return function()
-			(Input :: any)[field] = true
-		end, function()
-			(Input :: any)[field] = false
+
+	local ring = Instance.new("Frame")
+	ring.Size = UDim2.fromOffset(140, 140)
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.BackgroundColor3 = Color3.fromRGB(20, 22, 34)
+	ring.BackgroundTransparency = 0.6
+	ring.Visible = false
+	ring.Parent = gui
+	Instance.new("UICorner", ring).CornerRadius = UDim.new(1, 0)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.fromOffset(56, 56)
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Position = UDim2.fromScale(0.5, 0.5)
+	knob.BackgroundColor3 = Color3.fromRGB(220, 220, 235)
+	knob.BackgroundTransparency = 0.3
+	knob.Parent = ring
+	Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+	local moveTouch: InputObject? = nil
+	local lookTouch: InputObject? = nil
+	local moveOrigin = Vector2.zero
+	local lastLook = Vector2.zero
+
+	UserInputService.TouchStarted:Connect(function(touch, processed)
+		if processed then
+			return
 		end
-	end
-	local ld, lu = hold("left")
-	local rd, ru = hold("right")
-	local ud, uu = hold("up")
-	local dd, du = hold("down")
-	touchButton(gui, "<", UDim2.new(0, 70, 1, -90), 76, ld, lu)
-	touchButton(gui, ">", UDim2.new(0, 160, 1, -90), 76, rd, ru)
-	touchButton(gui, "^", UDim2.new(0, 115, 1, -170), 56, ud, uu)
-	touchButton(gui, "v", UDim2.new(0, 115, 1, -30), 50, dd, du)
+		local pos = Vector2.new(touch.Position.X, touch.Position.Y)
+		local viewport = workspace.CurrentCamera.ViewportSize
+		if pos.X < viewport.X * 0.4 and not moveTouch then
+			moveTouch = touch
+			moveOrigin = pos
+			ring.Position = UDim2.fromOffset(pos.X, pos.Y)
+			ring.Visible = true
+		elseif not lookTouch then
+			lookTouch = touch
+			lastLook = pos
+		end
+	end)
+	UserInputService.TouchMoved:Connect(function(touch)
+		local pos = Vector2.new(touch.Position.X, touch.Position.Y)
+		if touch == moveTouch then
+			local d = pos - moveOrigin
+			if d.Magnitude > 60 then
+				d = d.Unit * 60
+			end
+			knob.Position = UDim2.new(0.5, d.X, 0.5, d.Y)
+			Input.touchMove = Vector2.new(d.X / 60, -d.Y / 60)
+		elseif touch == lookTouch then
+			lookDelta += (pos - lastLook) * 1.4
+			lastLook = pos
+		end
+	end)
+	UserInputService.TouchEnded:Connect(function(touch)
+		if touch == moveTouch then
+			moveTouch = nil
+			Input.touchMove = Vector2.zero
+			ring.Visible = false
+			knob.Position = UDim2.fromScale(0.5, 0.5)
+		elseif touch == lookTouch then
+			lookTouch = nil
+		end
+	end)
+
 	touchButton(gui, "JUMP", UDim2.new(1, -80, 1, -90), 90, function()
 		Input.jumpHeld = true
 		fire("jump")
@@ -216,17 +276,14 @@ if UserInputService.TouchEnabled then
 		Input.attackHeld = false
 		fire("attackRelease")
 	end)
-	touchButton(gui, "BOLT", UDim2.new(1, -270, 1, -120), 58, function()
-		fire("bolt")
-	end)
-	touchButton(gui, "DODGE", UDim2.new(1, -40, 1, -190), 58, function()
-		fire("dodge")
-	end)
-	touchButton(gui, "MAP", UDim2.new(1, -60, 0, 60), 50, function()
-		fire("map")
-	end)
 	touchButton(gui, "DASH", UDim2.new(1, -110, 1, -190), 64, function()
 		fire("dash")
+	end)
+	touchButton(gui, "DODGE", UDim2.new(1, -40, 1, -190), 56, function()
+		fire("dodge")
+	end)
+	touchButton(gui, "BOLT", UDim2.new(1, -270, 1, -110), 58, function()
+		fire("bolt")
 	end)
 	touchButton(gui, "HEAL", UDim2.new(1, -200, 1, -170), 58, function()
 		Input.focusHeld = true
@@ -234,6 +291,12 @@ if UserInputService.TouchEnabled then
 	end, function()
 		Input.focusHeld = false
 		fire("focusEnd")
+	end)
+	touchButton(gui, "LOCK", UDim2.new(1, -60, 0.45, 0), 52, function()
+		fire("lock")
+	end)
+	touchButton(gui, "MAP", UDim2.new(1, -60, 0, 60), 50, function()
+		fire("map")
 	end)
 end
 

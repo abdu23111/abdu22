@@ -1,17 +1,35 @@
 --!strict
--- The nail's reach, shared so the client (effects, pogo) and server (damage) agree.
+-- The nail's reach as an oriented box, shared so the client (effects, pogo) and server
+-- (damage) agree. `rootCFrame` is the character's HumanoidRootPart CFrame.
 
 local Hitbox = {}
 
-function Hitbox.nail(rootPosition: Vector3, facing: number, direction: string, reach: number): (Vector3, Vector3)
+local function flatLook(cf: CFrame): Vector3
+	local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+	return if look.Magnitude > 1e-3 then look.Unit else Vector3.new(0, 0, -1)
+end
+
+-- Returns the box's CFrame and size for a strike direction:
+-- "side" (in front), "up", "down" (beneath, for pogo) or "cleave" (wide and long).
+function Hitbox.nail(rootCFrame: CFrame, direction: string, reach: number): (CFrame, Vector3)
+	local pos = rootCFrame.Position
+	local look = flatLook(rootCFrame)
+	local center: Vector3
+	local size: Vector3
 	if direction == "cleave" then
-		return rootPosition + Vector3.new(facing * (3 + 3.5 * reach), 0.5, 0), Vector3.new(9 * reach, 7, 10)
+		center = pos + look * (3 + 3.2 * reach) + Vector3.new(0, 0.5, 0)
+		size = Vector3.new(10 * reach, 7, 8.5 * reach)
 	elseif direction == "up" then
-		return rootPosition + Vector3.new(0, 3 + 2.4 * reach, 0), Vector3.new(5, 4.8 * reach, 10)
+		center = pos + Vector3.new(0, 3 + 2.4 * reach, 0) + look * 0.8
+		size = Vector3.new(6, 4.8 * reach, 6)
 	elseif direction == "down" then
-		return rootPosition + Vector3.new(0, -(3 + 2.4 * reach), 0), Vector3.new(5, 4.8 * reach, 10)
+		center = pos - Vector3.new(0, 3 + 2.4 * reach, 0)
+		size = Vector3.new(6, 4.8 * reach, 6)
+	else
+		center = pos + look * (2 + 2.6 * reach) + Vector3.new(0, 0.3, 0)
+		size = Vector3.new(6.5 * reach, 5, 5.2 * reach)
 	end
-	return rootPosition + Vector3.new(facing * (2 + 2.6 * reach), 0.3, 0), Vector3.new(5.2 * reach, 4.8, 10)
+	return CFrame.lookAt(center, center + look), size
 end
 
 return Hitbox

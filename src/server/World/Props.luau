@@ -8,7 +8,6 @@ local Config = require(Shared.Config)
 local Grid = require(Shared.Grid)
 
 local T = Config.TILE
-local DEPTH = Config.DEPTH
 
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local SPARKLE = "rbxasset://textures/particles/sparkles_main.dds"
@@ -236,16 +235,16 @@ function Props.gate(center: Vector3, size: Vector3, theme, parent: Instance): Ba
 		Anchored = true,
 		CanCollide = false,
 		Transparency = 1,
-		Size = Vector3.new(size.X * 0.6, size.Y, DEPTH),
+		Size = Vector3.new(size.X * 0.6, size.Y, size.Z),
 		Position = center,
 		Color = Color3.fromRGB(20, 20, 26),
 		Parent = parent,
 	})
-	for i = -1, 1 do
+	for i = -math.floor(size.Z / 6), math.floor(size.Z / 6) do
 		part("Part", {
 			Name = "Bar",
-			Size = Vector3.new(0.5, size.Y, 0.5),
-			Position = center + Vector3.new(i * 1.1, 0, DEPTH / 2 - 1),
+			Size = Vector3.new(0.7, size.Y, 0.7),
+			Position = center + Vector3.new(0, 0, i * 3),
 			Color = theme.rim:Lerp(Color3.new(0, 0, 0), 0.5),
 			Transparency = 1,
 			Parent = gate,
@@ -432,172 +431,8 @@ function Props.altar(floor: Vector3, parent: Instance)
 	prompt(lamp, "Kindle the Lantern", "Great Lamp")
 end
 
--- ===== Backdrop =====
-
-local function silhouette(style: string, x: number, maxY: number, z: number, s: number, color: Color3, rng: Random, parent: Instance, windowColor: Color3?)
-	if style == "caves" then
-		local r = rng:NextNumber()
-		if r < 0.45 then
-			Props.triangle(Vector3.new(x, -20, z), rng:NextNumber(10, 24) * s, rng:NextNumber(35, 95) * s, 2, false, color, parent)
-		elseif r < 0.85 then
-			Props.triangle(Vector3.new(x, maxY + 20, z), rng:NextNumber(10, 22) * s, rng:NextNumber(25, 70) * s, 2, true, color, parent)
-		else
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * rng:NextNumber(18, 40) * s, Position = Vector3.new(x, rng:NextNumber(-10, 10), z), Color = color, Parent = parent })
-		end
-	elseif style == "city" then
-		local w = rng:NextNumber(12, 26) * s
-		local h = rng:NextNumber(30, 100) * s
-		part("Part", { Size = Vector3.new(w, h, 2), Position = Vector3.new(x, -10 + h / 2, z), Color = color, Parent = parent })
-		if rng:NextNumber() < 0.6 then
-			Props.triangle(Vector3.new(x, -10 + h, z), w * 1.1, w * rng:NextNumber(0.5, 1.2), 2, false, color, parent)
-		else
-			part("Part", { Size = Vector3.new(w * 0.2, h * 0.4, 2), Position = Vector3.new(x, -10 + h * 1.2, z), Color = color, Parent = parent })
-		end
-		if windowColor then
-			for _ = 1, rng:NextInteger(1, 4) do
-				part("Part", {
-					Size = Vector3.new(1.4 * s, 2.4 * s, 0.2),
-					Position = Vector3.new(x + rng:NextNumber(-w / 3, w / 3), -10 + h * rng:NextNumber(0.3, 0.9), z + 1.2),
-					Color = windowColor,
-					Material = Enum.Material.Neon,
-					Transparency = rng:NextNumber(0.5, 0.8),
-					Parent = parent,
-				})
-			end
-		end
-	elseif style == "forest" then
-		local w = rng:NextNumber(3, 9) * s
-		part("Part", {
-			Size = Vector3.new(w, maxY + 80, 2),
-			CFrame = CFrame.new(x, maxY / 2, z) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-6, 6))),
-			Color = color,
-			Parent = parent,
-		})
-		for _ = 1, rng:NextInteger(1, 3) do
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(rng:NextNumber(20, 40), rng:NextNumber(12, 22), 2) * s, Position = Vector3.new(x + rng:NextNumber(-12, 12) * s, maxY * rng:NextNumber(0.55, 1.05), z), Color = color, Parent = parent })
-		end
-		if windowColor and rng:NextNumber() < 0.5 then
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2 * s, Position = Vector3.new(x + rng:NextNumber(-8, 8), maxY * rng:NextNumber(0.1, 0.8), z + 1.2), Color = windowColor, Material = Enum.Material.Neon, Transparency = 0.4, Parent = parent })
-		end
-	elseif style == "crystal" then
-		-- Leaning crystal spires with a faint inner glow.
-		local base = Vector3.new(x, rng:NextNumber(-20, 0), z)
-		for _ = 1, rng:NextInteger(2, 4) do
-			local h = rng:NextNumber(25, 80) * s
-			local w = rng:NextNumber(4, 10) * s
-			part("Part", {
-				Size = Vector3.new(w, h, 2),
-				CFrame = CFrame.new(base + Vector3.new(rng:NextNumber(-8, 8) * s, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-22, 22))),
-				Color = color,
-				Parent = parent,
-			})
-			if windowColor and rng:NextNumber() < 0.5 then
-				part("Part", {
-					Size = Vector3.new(w * 0.25, h * 0.7, 0.3),
-					CFrame = CFrame.new(base + Vector3.new(rng:NextNumber(-8, 8) * s, h * 0.45, 1.2)) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-22, 22))),
-					Color = windowColor,
-					Material = Enum.Material.Neon,
-					Transparency = 0.75,
-					Parent = parent,
-				})
-			end
-		end
-	elseif style == "library" then
-		-- Towering drowned bookshelves and reading arches.
-		local w = rng:NextNumber(10, 22) * s
-		local h = rng:NextNumber(50, 130) * s
-		part("Part", { Size = Vector3.new(w, h, 2), Position = Vector3.new(x, -10 + h / 2, z), Color = color, Parent = parent })
-		local shelves = math.floor(h / (6 * s))
-		for i = 1, math.min(shelves, 14) do
-			part("Part", {
-				Size = Vector3.new(w * 0.9, 0.5 * s, 0.4),
-				Position = Vector3.new(x, -10 + i * 6 * s, z + 1.1),
-				Color = color:Lerp(Color3.new(1, 1, 1), 0.08),
-				Parent = parent,
-			})
-		end
-		if windowColor and rng:NextNumber() < 0.6 then
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * 1.6 * s, Position = Vector3.new(x + rng:NextNumber(-w / 3, w / 3), -10 + h * rng:NextNumber(0.2, 0.9), z + 1.4), Color = windowColor, Material = Enum.Material.Neon, Transparency = 0.45, Parent = parent })
-		end
-	elseif style == "abyss" then
-		-- Pale hanging roots and heaps of abandoned lanterns.
-		if rng:NextNumber() < 0.6 then
-			local len = rng:NextNumber(40, 140) * s
-			part("Part", {
-				Size = Vector3.new(rng:NextNumber(0.8, 2.5) * s, len, 1),
-				CFrame = CFrame.new(x, maxY + 20 - len / 2, z) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-8, 8))),
-				Color = color:Lerp(Color3.new(1, 1, 1), 0.1),
-				Parent = parent,
-			})
-		else
-			local base = Vector3.new(x, rng:NextNumber(-15, 5), z)
-			for i = 1, rng:NextInteger(3, 7) do
-				part("Part", {
-					Shape = Enum.PartType.Ball,
-					Size = Vector3.new(3, 4, 2) * s * rng:NextNumber(0.6, 1.2),
-					Position = base + Vector3.new(rng:NextNumber(-10, 10) * s, i * 1.6 * s, 0),
-					Color = color,
-					Parent = parent,
-				})
-			end
-		end
-	else -- temple
-		local r = rng:NextNumber()
-		if r < 0.55 then
-			local w = rng:NextNumber(5, 9) * s
-			local h = maxY + 40
-			part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, w, w), CFrame = CFrame.new(x, h / 2 - 20, z) * CFrame.Angles(0, 0, math.rad(90)), Color = color, Parent = parent })
-			part("Part", { Size = Vector3.new(w * 1.6, w * 0.5, 2.5), Position = Vector3.new(x, maxY * rng:NextNumber(0.2, 0.5), z), Color = color, Parent = parent })
-		else
-			-- A praying moth statue: body, head and two folded wings.
-			local base = Vector3.new(x, rng:NextNumber(-5, 20), z)
-			local sz = rng:NextNumber(14, 26) * s
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(sz * 0.35, sz, 2), Position = base + Vector3.new(0, sz * 0.5, 0), Color = color, Parent = parent })
-			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(sz * 0.3, sz * 0.3, 2), Position = base + Vector3.new(0, sz * 1.05, 0), Color = color, Parent = parent })
-			Props.triangle(base + Vector3.new(-sz * 0.35, sz * 0.2, 0), sz * 0.6, sz * 1.1, 2, false, color, parent)
-			Props.triangle(base + Vector3.new(sz * 0.35, sz * 0.2, 0), sz * 0.6, sz * 1.1, 2, false, color, parent)
-		end
-	end
-end
-
-function Props.backdrop(zoneIndex: number, theme, folder: Folder)
-	local backdrop = make("Folder", { Name = "Backdrop", Parent = folder })
-	local rng = Random.new(zoneIndex * 104729)
-	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
-	local width = maxX - minX
-
-	make("Part", {
-		Name = "Void",
-		Anchored = true,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-		Size = Vector3.new(width + 900, maxY + 500, 2),
-		Position = Vector3.new(minX + width / 2, maxY / 2, -180),
-		Color = theme.fog,
-		Material = Enum.Material.SmoothPlastic,
-		Parent = backdrop,
-	})
-
-	local layers = {
-		{ z = -DEPTH / 2 - 14, scale = 0.9, spacing = 20 },
-		{ z = -60, scale = 1.5, spacing = 30 },
-		{ z = -115, scale = 2.4, spacing = 44 },
-	}
-	for i, layer in layers do
-		local color = theme.far[i]
-		local margin = 60 + i * 50
-		local x = minX - margin
-		while x < maxX + margin do
-			local tint = color:Lerp(theme.accent, rng:NextNumber(0, 0.04))
-			silhouette(theme.decor, x, maxY, layer.z, layer.scale, tint, rng, backdrop, if i < 3 then theme.accent else nil)
-			x += rng:NextNumber(0.6, 1.4) * layer.spacing
-		end
-	end
-end
-
-local function glowProp(style: string, floor: Vector3, theme, rng: Random, parent: Instance)
-	local z = -3.5
+local function glowProp(style: string, floor: Vector3, theme, rng: Random, parent: Instance): BasePart
+	local z = 0
 	local light
 	if style == "caves" then
 		light = part("Part", { Size = Vector3.new(1, 2.2, 1), CFrame = CFrame.new(floor + Vector3.new(0, 0.8, z)) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-25, 25))), Color = theme.accent, Material = Enum.Material.Neon, Parent = parent })
@@ -654,37 +489,31 @@ local function glowProp(style: string, floor: Vector3, theme, rng: Random, paren
 		Acceleration = Vector3.new(0, 0.6, 0),
 		Parent = light,
 	})
+	return light
 end
 
-function Props.ambience(zoneIndex: number, theme, floorSpots: { Vector3 }, folder: Folder)
+function Props.ambience(zoneIndex: number, theme, folder: Folder)
 	local ambience = make("Folder", { Name = "Ambience", Parent = folder })
-	local rng = Random.new(zoneIndex * 31337)
 	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
 	local width = maxX - minX
+	local depth = Config.CORRIDOR * 2
 
-	local lastX = -math.huge
-	for _, spot in floorSpots do
-		if spot.X - lastX > 26 and rng:NextNumber() < 0.5 then
-			glowProp(theme.decor, spot, theme, rng, ambience)
-			lastX = spot.X
-		end
-	end
-
+	-- Low banks of mist drifting along the corridor floor and higher up.
 	local mistColor = theme.fog:Lerp(Color3.new(1, 1, 1), 0.35)
 	for _, frac in { 0.12, 0.45, 0.78 } do
-		local holder = deco({ Name = "Mist", Transparency = 1, Size = Vector3.new(width, 10, 26), Position = Vector3.new(minX + width / 2, maxY * frac, -3), Parent = ambience })
+		local holder = deco({ Name = "Mist", Transparency = 1, Size = Vector3.new(width, 10, depth), Position = Vector3.new(minX + width / 2, maxY * frac, 0), Parent = ambience })
 		make("ParticleEmitter", {
 			Texture = SMOKE,
 			Color = ColorSequence.new(mistColor),
-			LightInfluence = 0.4,
+			LightInfluence = 0.5,
 			Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 1),
-				NumberSequenceKeypoint.new(0.4, 0.86),
+				NumberSequenceKeypoint.new(0.4, 0.88),
 				NumberSequenceKeypoint.new(1, 1),
 			}),
-			Size = NumberSequence.new(14, 22),
+			Size = NumberSequence.new(12, 20),
 			Lifetime = NumberRange.new(10, 16),
-			Rate = width / 45,
+			Rate = width / 30,
 			Speed = NumberRange.new(0.5, 1.6),
 			SpreadAngle = Vector2.new(180, 20),
 			Rotation = NumberRange.new(0, 360),
@@ -696,75 +525,66 @@ function Props.ambience(zoneIndex: number, theme, floorSpots: { Vector3 }, folde
 		})
 	end
 
-	local motes = deco({ Name = "Motes", Transparency = 1, Size = Vector3.new(width, maxY, 20), Position = Vector3.new(minX + width / 2, maxY / 2, 0), Parent = ambience })
+	-- Drifting dust motes everywhere, plus a zone-specific floater: leaves in the forest,
+	-- spores in the burrows, crystal glints in the mines, ash, pages, pale petals...
+	local volume = deco({ Name = "Motes", Transparency = 1, Size = Vector3.new(width, maxY, depth), Position = Vector3.new(minX + width / 2, maxY / 2, 0), Parent = ambience })
 	make("ParticleEmitter", {
+		Name = "Dust",
 		Texture = SPARKLE,
-		Color = ColorSequence.new(theme.accent),
-		LightEmission = 1,
+		Color = ColorSequence.new(theme.accent:Lerp(Color3.new(1, 1, 1), 0.5)),
+		LightEmission = 0.6,
 		Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.3, 0.3),
+			NumberSequenceKeypoint.new(0.3, 0.45),
 			NumberSequenceKeypoint.new(1, 1),
 		}),
-		Size = NumberSequence.new(0.35),
-		Lifetime = NumberRange.new(6, 10),
-		Rate = width / 18,
-		Speed = NumberRange.new(0.3, 1.2),
+		Size = NumberSequence.new(0.18),
+		Lifetime = NumberRange.new(8, 12),
+		Rate = width / 10,
+		Speed = NumberRange.new(0.2, 0.8),
 		SpreadAngle = Vector2.new(180, 180),
-		Acceleration = Vector3.new(0, 0.25, 0),
+		Acceleration = Vector3.new(0, 0.1, 0),
 		Shape = Enum.ParticleEmitterShape.Box,
 		ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
-		Parent = motes,
+		Parent = volume,
 	})
-end
-
--- ===== Layered scenery (added for depth) =====
-
-local function subfolder(parent: Instance, name: string): Folder
-	local existing = parent:FindFirstChild(name)
-	if existing then
-		return existing :: Folder
+	local floaters = {
+		forest = { color = Color3.fromRGB(110, 170, 90), size = 0.5, fall = -1.2, spin = 90, light = 0 },
+		burrows = { color = Color3.fromRGB(255, 190, 120), size = 0.22, fall = 0.4, spin = 0, light = 1 },
+		mines = { color = Color3.fromRGB(245, 180, 255), size = 0.25, fall = 0.1, spin = 0, light = 1 },
+		ruins = { color = Color3.fromRGB(190, 200, 220), size = 0.3, fall = -0.6, spin = 40, light = 0.2 },
+		archive = { color = Color3.fromRGB(230, 222, 196), size = 0.45, fall = -0.8, spin = 120, light = 0 },
+		temple = { color = Color3.fromRGB(255, 225, 160), size = 0.25, fall = 0.2, spin = 0, light = 1 },
+		hollow = { color = Color3.fromRGB(235, 235, 245), size = 0.3, fall = -0.3, spin = 60, light = 0.4 },
+	}
+	local f = floaters[theme.decor == "caves" and "burrows" or theme.decor == "city" and "ruins" or theme.decor == "crystal" and "mines"
+		or theme.decor == "library" and "archive" or theme.decor == "abyss" and "hollow" or theme.decor]
+	if f then
+		make("ParticleEmitter", {
+			Name = "Floaters",
+			Texture = if f.light > 0.5 then SPARKLE else SMOKE,
+			Color = ColorSequence.new(f.color),
+			LightEmission = f.light,
+			LightInfluence = 1 - f.light,
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.2, 0.2),
+				NumberSequenceKeypoint.new(0.85, 0.3),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Size = NumberSequence.new(f.size),
+			Lifetime = NumberRange.new(9, 14),
+			Rate = width / 40,
+			Speed = NumberRange.new(0.3, 1),
+			SpreadAngle = Vector2.new(180, 180),
+			Rotation = NumberRange.new(0, 360),
+			RotSpeed = NumberRange.new(-f.spin, f.spin),
+			Acceleration = Vector3.new(0.4, f.fall, 0),
+			Shape = Enum.ParticleEmitterShape.Box,
+			ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+			Parent = volume,
+		})
 	end
-	return make("Folder", { Name = name, Parent = parent })
-end
-
--- A darker, larger slab behind each block of rock, plus loose boulders along its edges,
--- so caves read as deep rooms instead of flat tiles.
-function Props.midground(center: Vector3, size: Vector3, theme, seed: number, zoneFolder: Instance)
-	local mid = subfolder(zoneFolder, "Midground")
-	local rng = Random.new(seed)
-	local grow = Vector3.new(rng:NextNumber(2, 7), rng:NextNumber(2, 7), 0)
-	part("Part", {
-		Size = Vector3.new(size.X + grow.X, size.Y + grow.Y, 8),
-		Position = center + Vector3.new(rng:NextNumber(-1.5, 1.5), rng:NextNumber(-1.5, 1.5), -DEPTH / 2 - 5),
-		Color = theme.rockDark,
-		Material = theme.material,
-		Parent = mid,
-	})
-	if size.X * size.Y > 60 then
-		for _ = 1, rng:NextInteger(1, 3) do
-			local edge = Vector3.new(rng:NextNumber(-0.5, 0.5) * size.X, (if rng:NextNumber() < 0.5 then -0.5 else 0.5) * size.Y, 0)
-			part("Part", {
-				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(rng:NextNumber(3, 8), rng:NextNumber(3, 6), 4),
-				Position = center + edge + Vector3.new(0, 0, -DEPTH / 2 - rng:NextNumber(1, 4)),
-				Color = theme.rockDark:Lerp(theme.rock, 0.35),
-				Material = theme.material,
-				Parent = mid,
-			})
-		end
-	end
-end
-
-function Props.edgeLump(theme, pos: Vector3, rng: Random, parent: Instance)
-	part("Part", {
-		Shape = Enum.PartType.Ball,
-		Size = Vector3.new(rng:NextNumber(1.4, 2.8), rng:NextNumber(0.9, 1.6), rng:NextNumber(1.2, 2)),
-		Position = pos,
-		Color = theme.rock:Lerp(theme.rim, rng:NextNumber(0.1, 0.3)),
-		Material = theme.material,
-		Parent = parent,
-	})
 end
 
 -- A pool of glossy black ink with a faint glowing skin.
@@ -772,7 +592,7 @@ function Props.ink(center: Vector3, size: Vector3, theme, parent: Instance)
 	local top = center.Y + size.Y / 2
 	part("Part", {
 		Name = "Ink",
-		Size = Vector3.new(size.X, size.Y * 0.8, DEPTH + 0.4),
+		Size = Vector3.new(size.X, size.Y * 0.8, size.Z),
 		Position = Vector3.new(center.X, top - size.Y * 0.4 - 0.4, 0),
 		Color = Color3.fromRGB(6, 8, 12),
 		Material = Enum.Material.Glass,
@@ -781,7 +601,7 @@ function Props.ink(center: Vector3, size: Vector3, theme, parent: Instance)
 		Parent = parent,
 	})
 	local skin = part("Part", {
-		Size = Vector3.new(size.X, 0.15, DEPTH + 0.5),
+		Size = Vector3.new(size.X, 0.15, size.Z),
 		Position = Vector3.new(center.X, top - 0.4, 0),
 		Color = theme.accent,
 		Material = Enum.Material.Neon,
@@ -835,20 +655,20 @@ function Props.shortcutGate(center: Vector3, size: Vector3, zoneId: string, them
 	local gate = make("Part", {
 		Name = "ShortcutGate",
 		Anchored = true,
-		Size = Vector3.new(size.X, size.Y, DEPTH),
+		Size = size,
 		Position = center,
 		Color = Color3.fromRGB(26, 26, 32),
 		Material = Enum.Material.Metal,
 		Parent = parent,
 	})
 	gate:SetAttribute("Switch", zoneId)
-	local bars = math.max(2, math.floor(math.max(size.X, size.Y) / 1.6))
+	local bars = math.max(2, math.floor(size.Z / 2.5))
 	for i = 1, bars do
 		local t = (i - 0.5) / bars - 0.5
 		local horizontal = size.X > size.Y
 		part("Part", {
-			Size = if horizontal then Vector3.new(0.4, size.Y + 0.4, 0.6) else Vector3.new(size.X + 0.4, 0.4, 0.6),
-			Position = center + (if horizontal then Vector3.new(t * size.X, 0, DEPTH / 2) else Vector3.new(0, t * size.Y, DEPTH / 2)),
+			Size = if horizontal then Vector3.new(size.X + 0.4, 0.5, 0.5) else Vector3.new(0.5, size.Y + 0.4, 0.5),
+			Position = center + Vector3.new(if horizontal then 0 else size.X / 2, if horizontal then size.Y / 2 else 0, t * size.Z),
 			Color = theme.rim:Lerp(Color3.new(0, 0, 0), 0.4),
 			Material = Enum.Material.Metal,
 			Parent = gate,
@@ -892,41 +712,6 @@ function Props.switch(pos: Vector3, kind: string, zoneId: string, theme, parent:
 	target:SetAttribute("Zone", zoneId)
 end
 
--- Dark shapes close to the camera frame the view like the edge of a painting.
-function Props.foreground(zoneIndex: number, theme, folder: Folder)
-	local fg = make("Folder", { Name = "Foreground", Parent = folder })
-	local rng = Random.new(zoneIndex * 5099)
-	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
-	local color = theme.fog:Lerp(Color3.new(0, 0, 0), 0.55)
-	local x = minX + rng:NextNumber(10, 40)
-	while x < maxX do
-		local z = rng:NextNumber(15, 22)
-		if rng:NextNumber() < 0.5 then
-			Props.triangle(Vector3.new(x, maxY + 2, z), rng:NextNumber(5, 12), rng:NextNumber(12, 30), 2, true, color, fg)
-		else
-			local h = rng:NextNumber(8, 22)
-			part("Part", {
-				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(rng:NextNumber(10, 22), h, 3),
-				Position = Vector3.new(x, rng:NextNumber(-4, 2), z),
-				Color = color,
-				Parent = fg,
-			})
-			if theme.decor == "forest" or theme.decor == "abyss" then
-				for _ = 1, 3 do
-					part("Part", {
-						Size = Vector3.new(0.4, rng:NextNumber(4, 10), 0.4),
-						CFrame = CFrame.new(x + rng:NextNumber(-5, 5), h / 2, z) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(-25, 25))),
-						Color = color,
-						Parent = fg,
-					})
-				end
-			end
-		end
-		x += rng:NextNumber(45, 90)
-	end
-end
-
 -- Slanted beams of pale light falling from openings near the top of a zone, with dust in them.
 function Props.lightShafts(zoneIndex: number, chars, theme, folder: Folder)
 	local shafts = make("Folder", { Name = "LightShafts", Parent = folder })
@@ -949,14 +734,16 @@ function Props.lightShafts(zoneIndex: number, chars, theme, folder: Folder)
 				local top = Grid.tileCenter(zoneIndex, c, r0) + Vector3.new(0, T / 2, 0)
 				local len = rng:NextNumber(60, 110)
 				local angle = math.rad(rng:NextNumber(10, 22))
-				local cf = CFrame.new(top) * CFrame.Angles(0, 0, angle) * CFrame.new(0, -len / 2, -6)
+				local z = rng:NextNumber(-Config.CORRIDOR * 0.6, Config.CORRIDOR * 0.6)
+				local cf = CFrame.new(top + Vector3.new(0, 0, z)) * CFrame.Angles(math.rad(rng:NextNumber(-8, 8)), 0, angle) * CFrame.new(0, -len / 2, 0)
+				local thick = rng:NextNumber(6, 11)
 				local beam = part("Part", {
 					Name = "Shaft",
-					Size = Vector3.new(rng:NextNumber(7, 14), len, 0.2),
+					Size = Vector3.new(thick, len, thick),
 					CFrame = cf,
 					Color = theme.accent:Lerp(Color3.new(1, 1, 1), 0.6),
 					Material = Enum.Material.Neon,
-					Transparency = 0.93,
+					Transparency = 0.955,
 					Parent = shafts,
 				})
 				make("ParticleEmitter", {
@@ -979,6 +766,150 @@ function Props.lightShafts(zoneIndex: number, chars, theme, folder: Folder)
 				})
 			end
 		end
+	end
+end
+
+-- ===== 3D props =====
+
+-- A single pale thorn blade at a random angle; many of them make a bramble.
+function Props.thorn3D(base: Vector3, rng: Random, parent: Instance)
+	local h = rng:NextNumber(2.2, 3.4)
+	part("WedgePart", {
+		Size = Vector3.new(0.4, h, rng:NextNumber(0.9, 1.5)),
+		CFrame = CFrame.new(base + Vector3.new(0, h / 2, 0)) * CFrame.Angles(math.rad(rng:NextNumber(-18, 18)), rng:NextNumber(0, math.pi * 2), math.rad(rng:NextNumber(-18, 18))),
+		Color = Color3.fromRGB(214, 208, 218):Lerp(Color3.fromRGB(120, 116, 128), rng:NextNumber(0, 0.6)),
+		Parent = parent,
+	})
+end
+
+-- An invisible anchor where each client builds the NPC's animated rig.
+function Props.npcAnchor(id: string, name: string, floor: Vector3, parent: Instance)
+	local anchor = make("Part", {
+		Name = "NPCAnchor",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Transparency = 1,
+		Size = Vector3.new(3, 5, 3),
+		Position = floor + Vector3.new(0, 2.5, 0),
+		Parent = parent,
+	})
+	anchor:SetAttribute("NpcId", id)
+	anchor:SetAttribute("Facing", Vector3.new(0.35, 0, 1).Unit)
+	local model = make("Model", { Name = "NPC_" .. id, Parent = parent })
+	model:SetAttribute("NpcId", id)
+	anchor.Parent = model
+	model.PrimaryPart = anchor
+	prompt(anchor, if id == "lirra" or id == "tock" then "Trade" else "Listen", name)
+end
+
+-- A glowing archway where a passage leads on to another region.
+function Props.doorway(center: Vector3, size: Vector3, inward: number, theme, parent: Instance)
+	local x = center.X + inward * (T / 2 - 0.3)
+	local glowColor = theme.accent:Lerp(Color3.new(1, 1, 1), 0.5)
+	local veil = part("Part", {
+		Name = "DoorVeil",
+		Size = Vector3.new(0.3, size.Y, size.Z),
+		Position = Vector3.new(x, center.Y, center.Z),
+		Color = glowColor,
+		Material = Enum.Material.Neon,
+		Transparency = 0.88,
+		Parent = parent,
+	})
+	make("PointLight", { Range = 22, Brightness = 1.4, Color = glowColor, Parent = veil })
+	make("ParticleEmitter", {
+		Texture = SPARKLE,
+		Color = ColorSequence.new(glowColor),
+		LightEmission = 1,
+		Size = NumberSequence.new(0.3, 0),
+		Lifetime = NumberRange.new(1.5, 3),
+		Rate = 12,
+		Speed = NumberRange.new(1, 3),
+		EmissionDirection = if inward > 0 then Enum.NormalId.Right else Enum.NormalId.Left,
+		Shape = Enum.ParticleEmitterShape.Box,
+		ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume,
+		Parent = veil,
+	})
+end
+
+-- Region-specific set dressing against the cave walls.
+function Props.wallDecor(theme, floor: Vector3, side: number, rng: Random, parent: Instance)
+	local style = theme.decor
+	if style == "caves" then
+		-- Stalagmite: crossed triangles make a cone-like spire.
+		local h, w = rng:NextNumber(4, 10), rng:NextNumber(2, 4)
+		for _, yaw in { 0, math.pi / 2 } do
+			local cf = CFrame.new(floor) * CFrame.Angles(0, yaw, 0)
+			local model = make("Model", { Parent = parent })
+			Props.triangle(Vector3.zero, w, h, w * 0.8, false, theme.wallColor:Lerp(theme.rim, 0.15), model)
+			model:PivotTo(cf)
+		end
+	elseif style == "city" then
+		-- A broken column, sometimes toppled.
+		local h = rng:NextNumber(5, 14)
+		local r = rng:NextNumber(1.6, 2.4)
+		part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, r * 2, r * 2), CFrame = CFrame.new(floor + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = theme.smooth, Material = Enum.Material.Cobblestone, Parent = parent })
+		part("Part", { Size = Vector3.new(r * 2.6, 0.8, r * 2.6), Position = floor + Vector3.new(0, 0.4, 0), Color = theme.rim:Lerp(theme.rock, 0.5), Parent = parent })
+		if rng:NextNumber() < 0.5 then
+			part("Part", { Size = Vector3.new(r * 2.6, 0.8, r * 2.6), Position = floor + Vector3.new(0, h, 0), Color = theme.rim:Lerp(theme.rock, 0.5), Parent = parent })
+		end
+	elseif style == "forest" then
+		-- Giant glowing mushrooms and curling roots.
+		local h = rng:NextNumber(3, 9)
+		part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 0.9, 0.9), CFrame = CFrame.new(floor + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90 + rng:NextNumber(-10, 10))), Color = Color3.fromRGB(200, 214, 196), Parent = parent })
+		local cap = part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(h * 0.8, h * 0.3, h * 0.8), Position = floor + Vector3.new(0, h, 0), Color = theme.accent:Lerp(theme.rock, 0.35), Material = Enum.Material.Neon, Transparency = 0.1, Parent = parent })
+		for _ = 1, 3 do
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.one * rng:NextNumber(0.3, 0.6), Position = cap.Position + Vector3.new(rng:NextNumber(-1, 1), 0.4, rng:NextNumber(-1, 1)) * h * 0.3, Color = Color3.fromRGB(255, 255, 230), Material = Enum.Material.Neon, Parent = parent })
+		end
+		make("PointLight", { Range = h * 2.5, Brightness = 0.9, Color = theme.accent, Shadows = false, Parent = cap })
+	elseif style == "temple" then
+		local h = rng:NextNumber(10, 20)
+		part("Part", { Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 2.8, 2.8), CFrame = CFrame.new(floor + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = theme.smooth, Material = Enum.Material.Marble, Parent = parent })
+		part("Part", { Size = Vector3.new(4, 1, 4), Position = floor + Vector3.new(0, h, 0), Color = theme.rim, Material = Enum.Material.Marble, Parent = parent })
+		part("Part", { Size = Vector3.new(3.8, 0.8, 3.8), Position = floor + Vector3.new(0, 0.4, 0), Color = theme.rim, Material = Enum.Material.Marble, Parent = parent })
+	elseif style == "crystal" then
+		for _ = 1, rng:NextInteger(3, 6) do
+			local h = rng:NextNumber(2, 8)
+			part("Part", {
+				Size = Vector3.new(rng:NextNumber(0.8, 1.8), h, rng:NextNumber(0.8, 1.8)),
+				CFrame = CFrame.new(floor + Vector3.new(rng:NextNumber(-1.5, 1.5), h * 0.4, rng:NextNumber(-1.5, 1.5))) * CFrame.Angles(math.rad(rng:NextNumber(-25, 25)), rng:NextNumber(0, math.pi), math.rad(rng:NextNumber(-25, 25))),
+				Color = theme.accent:Lerp(Color3.new(1, 1, 1), rng:NextNumber(0, 0.4)),
+				Material = Enum.Material.Glass,
+				Transparency = 0.25,
+				Parent = parent,
+			})
+		end
+	elseif style == "library" then
+		-- A tall drowned bookshelf.
+		local h = rng:NextNumber(8, 16)
+		local wood = Color3.fromRGB(70, 50, 38)
+		local shelf = make("Model", { Parent = parent })
+		part("Part", { Size = Vector3.new(6, h, 1.2), Position = Vector3.new(0, h / 2, -0.6 * side), Color = wood, Material = Enum.Material.WoodPlanks, Parent = shelf })
+		for y = 1.5, h - 1, 2.2 do
+			part("Part", { Size = Vector3.new(6, 0.25, 1.4), Position = Vector3.new(0, y, 0), Color = wood, Parent = shelf })
+			local x = -2.6
+			while x < 2.6 do
+				local bw = rng:NextNumber(0.3, 0.6)
+				part("Part", { Size = Vector3.new(bw, rng:NextNumber(1.2, 1.9), 1), Position = Vector3.new(x + bw / 2, y + 0.9, 0), Color = Color3.fromHSV(rng:NextNumber(0, 0.6), 0.35, rng:NextNumber(0.2, 0.45)), Parent = shelf })
+				x += bw + 0.05
+			end
+		end
+		shelf:PivotTo(CFrame.new(floor) * CFrame.Angles(0, 0, 0))
+	elseif style == "abyss" then
+		for i = 1, rng:NextInteger(3, 6) do
+			part("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(1.2, 1.6, 1.2), Position = floor + Vector3.new(rng:NextNumber(-2, 2), 0.8 + (i % 3) * 1.2, rng:NextNumber(-2, 2)), Color = Color3.fromRGB(46, 46, 52), Material = Enum.Material.Glass, Transparency = 0.2, Parent = parent })
+		end
+	end
+end
+
+-- A light source at the base of a wall; a few cast real shadows.
+function Props.glowLight(theme, floor: Vector3, rng: Random, parent: Instance, shadows: boolean)
+	local light = glowProp(theme.decor, floor, theme, rng, parent)
+	local pointLight = light:FindFirstChildOfClass("PointLight")
+	if pointLight then
+		pointLight.Shadows = shadows
+		pointLight.Range = 22
 	end
 end
 

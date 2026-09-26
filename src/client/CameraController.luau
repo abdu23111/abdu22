@@ -1,27 +1,33 @@
--- Side-on camera that eases after the player, looks ahead, stays inside the current zone,
--- pulls back during boss fights, lets you peek up and down, pans to bosses for their
--- introductions, and shakes.
+-- Third-person orbit camera: mouse / right stick / touch-drag to look, pulls in against cave
+-- walls, lock-on that keeps a target framed, slow orbits for boss introductions, and shake.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Config = require(Shared.Config)
-local Grid = require(Shared.Grid)
 local Net = require(Shared.Net)
 local State = require(script.Parent.State)
 local Input = require(script.Parent.Input)
 
 local CameraController = {}
 
+local DISTANCE = 17
+local ARENA_DISTANCE = 22
+local SHOULDER = 1.4
+local MOUSE_SENS = 0.0042
+local STICK_SENS = 2.6
+
+local yaw = 0
+local pitch = math.rad(-12)
+local distance = DISTANCE
 local focus = Vector3.zero
-local lookahead = 0
-local distance = Config.CAMERA_DISTANCE
-local peek = 0
-local stillTime = 0
 local shakeAmount = 0
 local snapNext = true
-local cinematic: { target: Vector3, untilTime: number }? = nil
+local cinematic: { target: Vector3, startTime: number, untilTime: number, startYaw: number }? = nil
+
+local castParams = RaycastParams.new()
+castParams.FilterType = Enum.RaycastFilterType.Include
 
 function CameraController.snap()
 	snapNext = true
@@ -31,91 +37,133 @@ function CameraController.shake(amount: number)
 	shakeAmount = math.max(shakeAmount, amount)
 end
 
--- Hold the camera on a point for a while (boss introductions).
-function CameraController.focusOn(target: Vector3, duration: number)
-	cinematic = { target = target, untilTime = os.clock() + duration }
+function CameraController.yaw(): number
+	return yaw
 end
 
-local function clampToZone(pos: Vector3, camera: Camera, dist: number): Vector3
-	local zone = State.zone
-	if not zone then
-		return pos
+-- Turn the camera to look along a horizontal direction.
+function CameraController.faceDirection(dir: Vector3)
+	if dir.Magnitude > 1e-3 then
+		yaw = math.atan2(-dir.X, -dir.Z)
 	end
-	local minX, maxX, minY, maxY = Grid.bounds(zone)
-	local halfH = dist * math.tan(math.rad(camera.FieldOfView / 2))
-	local viewport = camera.ViewportSize
-	local halfW = halfH * (viewport.X / math.max(viewport.Y, 1))
-	local x, y = pos.X, pos.Y
-	if maxX - minX <= halfW * 2 then
-		x = (minX + maxX) / 2
-	else
-		x = math.clamp(x, minX + halfW, maxX - halfW)
+end
+
+-- Slowly orbit a point for a while (boss introductions).
+function CameraController.focusOn(target: Vector3, duration: number)
+	cinematic = { target = target, startTime = os.clock(), untilTime = os.clock() + duration, startYaw = yaw }
+end
+
+local function refreshFilter()
+	local list = { workspace.Terrain }
+	local world = workspace:FindFirstChild("World")
+	if world then
+		for _, zone in world:GetChildren() do
+			for _, name in { "Map", "Breakables", "ShortcutGates" } do
+				local f = zone:FindFirstChild(name)
+				if f then
+					table.insert(list, f)
+				end
+			end
+		end
 	end
-	if maxY - minY <= halfH * 2 then
-		y = (minY + maxY) / 2
-	else
-		y = math.clamp(y, minY + halfH, maxY - halfH)
+	castParams.FilterDescendantsInstances = list
+end
+
+-- Pull the camera in front of any wall between it and the player.
+local function collide(from: Vector3, to: Vector3): Vector3
+	local dir = to - from
+	local hit = workspace:Spherecast(from, 0.9, dir, castParams)
+	if hit then
+		return from + dir.Unit * math.max(1.5, hit.Distance - 0.2)
 	end
-	return Vector3.new(x, y, 0)
+	return to
 end
 
 function CameraController.init()
-	local camera = workspace.CurrentCamera
+	refreshFilter()
 	Net.event("CameraShake").OnClientEvent:Connect(CameraController.shake)
 
 	RunService:BindToRenderStep("VesperdeepCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
-		camera = workspace.CurrentCamera
+		local camera = workspace.CurrentCamera
 		camera.CameraType = Enum.CameraType.Scriptable
-		camera.FieldOfView = Config.CAMERA_FOV
+		camera.FieldOfView = 70
+
+		-- Free the mouse whenever a menu is open.
+		if State.uiOpen() then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true
+		else
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			UserInputService.MouseIconEnabled = false
+		end
+
 		local root = State.root
 		if not root then
 			return
 		end
 
-		-- Peek: hold up or down while standing still.
-		local vx = math.abs(root.AssemblyLinearVelocity.X)
-		local wantPeek = 0
-		if State.grounded and vx < 1 and not State.frozen() then
-			stillTime += dt
-			if stillTime > 0.45 then
-				wantPeek = if Input.lookUp() then 1 elseif Input.lookDown() then -1 else 0
+		local look = Input.consumeLook()
+		if not State.uiOpen() then
+			yaw -= look.X * MOUSE_SENS
+			pitch -= look.Y * MOUSE_SENS
+			local stick = Input.lookStick
+			if stick.Magnitude > 0.15 then
+				yaw -= stick.X * STICK_SENS * dt
+				pitch -= stick.Y * STICK_SENS * 0.6 * dt
 			end
-		else
-			stillTime = 0
 		end
-		peek += (wantPeek * Config.CAMERA_PEEK - peek) * math.min(1, dt * 3)
 
-		local wantDistance = if State.bossFight then Config.CAMERA_ARENA_DISTANCE else Config.CAMERA_DISTANCE
-		local target
+		-- Lock-on: steer toward keeping the target in front, slightly to the side.
+		local target = State.lockTarget
+		if target and target.Parent then
+			local to = target.Position - root.Position
+			local wantYaw = math.atan2(-to.X, -to.Z)
+			local diff = (wantYaw - yaw + math.pi) % (2 * math.pi) - math.pi
+			yaw += diff * math.min(1, dt * 6)
+			local flat = Vector3.new(to.X, 0, to.Z).Magnitude
+			local wantPitch = math.clamp(-math.atan2(math.max(0, root.Position.Y - target.Position.Y) + 4, flat + 6), math.rad(-40), math.rad(-5))
+			pitch += (wantPitch - pitch) * math.min(1, dt * 3)
+		end
+		pitch = math.clamp(pitch, math.rad(-65), math.rad(45))
+
+		local wantDistance = if State.bossFight then ARENA_DISTANCE else DISTANCE
+		distance += (wantDistance - distance) * math.min(1, dt * 2)
+
+		local wantFocus = root.Position + Vector3.new(0, 2.6, 0)
+		if snapNext then
+			focus = wantFocus
+			snapNext = false
+			refreshFilter()
+		else
+			local k = 1 - math.exp(-dt * 14)
+			local ky = 1 - math.exp(-dt * 7)
+			focus = Vector3.new(focus.X + (wantFocus.X - focus.X) * k, focus.Y + (wantFocus.Y - focus.Y) * ky, focus.Z + (wantFocus.Z - focus.Z) * k)
+		end
+
+		local cf
 		if cinematic and os.clock() < cinematic.untilTime then
-			wantDistance = Config.CAMERA_DISTANCE * 0.8
-			target = cinematic.target + Vector3.new(0, 2, 0)
+			local t = os.clock() - cinematic.startTime
+			local c = cinematic.target
+			local a = cinematic.startYaw + t * 0.35
+			local eye = c + Vector3.new(math.sin(a) * 24, 7, math.cos(a) * 24)
+			eye = collide(c + Vector3.new(0, 4, 0), eye)
+			cf = CFrame.lookAt(eye, c + Vector3.new(0, 3, 0))
 		else
 			cinematic = nil
-			lookahead += (State.facing * Config.CAMERA_LOOKAHEAD - lookahead) * math.min(1, dt * 2.5)
-			target = root.Position + Vector3.new(lookahead, Config.CAMERA_HEIGHT + peek, 0)
+			local orbit = CFrame.new(focus) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
+			local desired = (orbit * CFrame.new(SHOULDER, 0, distance)).Position
+			local eye = collide(focus, desired)
+			cf = CFrame.lookAt(eye, (orbit * CFrame.new(SHOULDER, 0, 0)).Position)
 		end
-		distance += (wantDistance - distance) * math.min(1, dt * 2)
-		target = clampToZone(target, camera, distance)
 
-		if snapNext then
-			focus = target
-			snapNext = false
-		else
-			local vy = target.Y - focus.Y
-			local k = if cinematic then 3 else 7
-			-- Follow vertical movement a bit more lazily, like a hand-held storybook camera.
-			local kx = 1 - math.exp(-dt * k)
-			local ky = 1 - math.exp(-dt * (if cinematic then 3 elseif math.abs(vy) > 10 then 8 else 4))
-			focus = Vector3.new(focus.X + (target.X - focus.X) * kx, focus.Y + vy * ky, 0)
-		end
-		local offset = Vector3.zero
 		if shakeAmount > 0.01 then
-			offset = Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * shakeAmount * 2
-			shakeAmount *= math.exp(-dt * 7)
+			local o = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * shakeAmount * 1.2
+			cf = cf + o
+			shakeAmount *= math.exp(-dt * 8)
 		end
-		camera.CFrame = CFrame.new(focus + offset + Vector3.new(0, 0, distance))
+		camera.CFrame = cf
 		camera.Focus = CFrame.new(focus)
+		State.cameraYaw = yaw
 	end)
 end
 
