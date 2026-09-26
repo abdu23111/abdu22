@@ -53,6 +53,9 @@ type Fight = {
 local fights: { Fight } = {}
 
 local function flat(v: Vector3): Vector3
+	if Config.SIDE_VIEW then
+		return if math.abs(v.X) > 1e-4 then Vector3.new(math.sign(v.X), 0, 0) else Vector3.zero
+	end
 	local f = Vector3.new(v.X, 0, v.Z)
 	return if f.Magnitude > 1e-4 then f.Unit else Vector3.zero
 end
@@ -154,8 +157,8 @@ local function createBoss(fight: Fight)
 		size = def.size,
 		minX = info.minX + half,
 		maxX = info.maxX - half,
-		minZ = -info.zHalf + half,
-		maxZ = info.zHalf - half,
+		minZ = if Config.SIDE_VIEW then 0 else -info.zHalf + half,
+		maxZ = if Config.SIDE_VIEW then 0 else info.zHalf - half,
 		floorY = info.floorY,
 		ceilY = info.ceilY,
 		groundY = info.floorY + def.size.Y / 2,
@@ -357,7 +360,21 @@ local function createBoss(fight: Fight)
 		})
 	end
 	-- Fire `count` projectiles fanned horizontally around `dir`.
+	-- Rotate a direction by `a` radians within the play plane (vertical plane in side view).
+	function b.rotate(dir: Vector3, a: number): Vector3
+		if Config.SIDE_VIEW then
+			return Vector3.new(dir.X * math.cos(a) - dir.Y * math.sin(a), dir.X * math.sin(a) + dir.Y * math.cos(a), 0).Unit
+		end
+		return Vector3.new(dir.X * math.cos(a) - dir.Z * math.sin(a), 0, dir.X * math.sin(a) + dir.Z * math.cos(a)).Unit
+	end
 	function b.fan(origin: Vector3, dir: Vector3, count: number, spread: number, speed: number, opts)
+		if Config.SIDE_VIEW then
+			-- Fanned in the vertical plane around the aim.
+			for i = 1, count do
+				b.projectile(origin, b.rotate(dir.Unit, (i - (count + 1) / 2) * spread) * speed, opts)
+			end
+			return
+		end
 		local base = math.atan2(dir.Z, dir.X)
 		local pitch = math.asin(math.clamp(dir.Unit.Y, -1, 1))
 		for i = 1, count do
@@ -392,6 +409,24 @@ local function createBoss(fight: Fight)
 		})
 		temp(disc, t)
 		TweenService:Create(disc, TweenInfo.new(t / 3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.75 }):Play()
+		if Config.SIDE_VIEW then
+			-- From the side a floor disc is a thin line, so a glowing column rises over the spot.
+			local column = make("Part", {
+				Anchored = true,
+				CanCollide = false,
+				CanQuery = false,
+				CanTouch = false,
+				CastShadow = false,
+				Material = Enum.Material.Neon,
+				Color = WARN,
+				Transparency = 0.8,
+				Size = Vector3.new(radius * 1.6, 14, 0.4),
+				Position = Vector3.new(at.X, b.floorY + 7, -1),
+				Parent = workspace,
+			})
+			temp(column, t)
+			TweenService:Create(column, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = Vector3.new(radius * 0.4, 14, 0.4), Transparency = 0.45 }):Play()
+		end
 	end
 	-- A thin warning line from `from` along `dir`.
 	function b.beamWarn(from: Vector3, dir: Vector3, length: number, t: number)
@@ -459,6 +494,12 @@ local function createBoss(fight: Fight)
 	-- Flood the arena floor with ink up to `top` for a while (runs alongside other attacks).
 	function b.inkTide(top: number, duration: number)
 		local sizeX, sizeZ = fight.info.maxX - fight.info.minX, fight.info.zHalf * 2
+		local cz = 0
+		if Config.SIDE_VIEW then
+			-- Only from the back wall to the front edge of the floor, never between camera and player.
+			sizeZ = fight.info.zHalf + Config.FRONT_DEPTH
+			cz = (Config.FRONT_DEPTH - fight.info.zHalf) / 2
+		end
 		local cx = (fight.info.minX + fight.info.maxX) / 2
 		local ink = make("Part", {
 			Anchored = true,
@@ -470,7 +511,7 @@ local function createBoss(fight: Fight)
 			Reflectance = 0.3,
 			Transparency = 0.1,
 			Size = Vector3.new(sizeX, 0.2, sizeZ),
-			Position = Vector3.new(cx, b.floorY, 0),
+			Position = Vector3.new(cx, b.floorY, cz),
 			Parent = workspace,
 		})
 		temp(ink)
@@ -478,15 +519,15 @@ local function createBoss(fight: Fight)
 		for player in fight.participants do
 			PlayerService.notify(player, "The ink is rising!", "Get off the floor.", "info")
 		end
-		TweenService:Create(ink, TweenInfo.new(1, Enum.EasingStyle.Sine), { Size = Vector3.new(sizeX, height, sizeZ), Position = Vector3.new(cx, b.floorY + height / 2, 0) }):Play()
+		TweenService:Create(ink, TweenInfo.new(1, Enum.EasingStyle.Sine), { Size = Vector3.new(sizeX, height, sizeZ), Position = Vector3.new(cx, b.floorY + height / 2, cz) }):Play()
 		task.delay(1, function()
 			if fight.boss == b and not b.cancelled then
-				b.hazard(CFrame.new(cx, b.floorY + height / 2, 0), Vector3.new(sizeX, height, sizeZ), duration)
+				b.hazard(CFrame.new(cx, b.floorY + height / 2, cz), Vector3.new(sizeX, height, sizeZ), duration)
 			end
 		end)
 		task.delay(1 + duration, function()
 			if ink.Parent then
-				TweenService:Create(ink, TweenInfo.new(0.8), { Size = Vector3.new(sizeX, 0.2, sizeZ), Position = Vector3.new(cx, b.floorY, 0) }):Play()
+				TweenService:Create(ink, TweenInfo.new(0.8), { Size = Vector3.new(sizeX, 0.2, sizeZ), Position = Vector3.new(cx, b.floorY, cz) }):Play()
 				task.delay(0.9, function()
 					if ink.Parent then
 						ink:Destroy()

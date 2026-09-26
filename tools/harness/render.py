@@ -355,40 +355,40 @@ def floor_under(scene, x, z, y_hint):
     return best
 
 
+def side_camera(focus, dist=52.0):
+    """Matches CameraController in side view: straight at the play plane, slightly above."""
+    eye = [focus[0], focus[1] + dist * 0.06, dist]
+    return eye, [focus[0], focus[1], 0]
+
+
 def default_shots(scene):
     shots = []
     for zi, theme in sorted(scene["themes"].items()):
         zid = theme["id"]
         zone = scene["zones"][zi]
         x0, x1 = zone["min"][0], zone["max"][0]
-        # Pick a few floor spots along the zone: where enemies, benches or NPCs are.
         spots = []
         if zi == 1 and scene["start"]:
             spots.append(scene["start"])
         for p in scene["parts"]:
             if p["z"] == zi and p["n"] == "NPCAnchor":
-                spots.append([p["cf"][0] + 6, p["cf"][1] + 0.5, p["cf"][2] + 6])
+                spots.append([p["cf"][0] + 8, p["cf"][1] + 0.5, 0])
         for e in scene["enemies"]:
             if e["z"] == zi and e["kind"] not in FLYERS:
                 spots.append([e["p"][0] - 10, e["p"][1] + 1, 0])
-        spots = spots[:2]
-        for k, s in enumerate(spots):
-            fy = floor_under(scene, s[0], s[2], s[1] + 2)
+        for k, s in enumerate(spots[:3]):
+            fy = floor_under(scene, s[0], 0, s[1] + 2)
             if fy < -1e8:
                 continue
-            feet = [s[0], fy, s[2]]
-            focus = [feet[0], feet[1] + 3 + 2.6, feet[2]]
-            # Along the corridor, like the default play camera turned to face the way ahead.
-            eye, target = orbit_camera(focus, -90, -12, 17)
-            shots.append(dict(name=f"{zid}_play{k + 1}", zone=zi, x0=feet[0] - 60, x1=feet[0] + 120, eye=eye, target=target, player_at=feet, player_facing=(1, 0, 0), clip="run"))
-            # Side view.
-            eye, target = orbit_camera(focus, 0, -8, 26)
-            shots.append(dict(name=f"{zid}_side{k + 1}", zone=zi, x0=feet[0] - 60, x1=feet[0] + 60, eye=eye, target=target, player_at=feet, player_facing=(1, 0, 0), clip="idle"))
-        # A cutaway overview of the whole region with the near wall removed.
+            feet = [s[0], fy, 0]
+            focus = [feet[0] + 6, feet[1] + 3 + 3, 0]
+            eye, target = side_camera(focus)
+            shots.append(dict(name=f"{zid}_2d{k + 1}", zone=zi, x0=feet[0] - 90, x1=feet[0] + 90, eye=eye, target=target,
+                              player_at=feet, player_facing=(1, 0, 0), clip="run" if k == 1 else "idle", fov=40))
+        # A wide shot of a long stretch of the region.
         mid = [(x0 + x1) / 2, (zone["min"][1] + zone["max"][1]) / 2, 0]
-        width = x1 - x0
-        dist = width * 0.62
-        shots.append(dict(name=f"{zid}_overview", zone=zi, x0=x0, x1=x1, eye=[mid[0], mid[1] + width * 0.08, dist], target=mid, cut_z=6, fov=55, exposure=1.35))
+        eye, target = side_camera(mid, min(260.0, (x1 - x0) * 0.45))
+        shots.append(dict(name=f"{zid}_wide", zone=zi, x0=x0, x1=x1, eye=eye, target=target, fov=40, exposure=1.2))
     return shots
 
 

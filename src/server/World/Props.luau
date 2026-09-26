@@ -497,11 +497,17 @@ function Props.ambience(zoneIndex: number, theme, folder: Folder)
 	local minX, maxX, _, maxY = Grid.bounds(zoneIndex)
 	local width = maxX - minX
 	local depth = Config.CORRIDOR * 2
+	local zc = 0
+	if Config.SIDE_VIEW then
+		-- Behind the play plane only (plus a sliver in front), so haze never covers the action.
+		depth = Config.CORRIDOR + 2
+		zc = -Config.CORRIDOR / 2 + 1
+	end
 
 	-- Low banks of mist drifting along the corridor floor and higher up.
 	local mistColor = theme.fog:Lerp(Color3.new(1, 1, 1), 0.35)
 	for _, frac in { 0.12, 0.45, 0.78 } do
-		local holder = deco({ Name = "Mist", Transparency = 1, Size = Vector3.new(width, 10, depth), Position = Vector3.new(minX + width / 2, maxY * frac, 0), Parent = ambience })
+		local holder = deco({ Name = "Mist", Transparency = 1, Size = Vector3.new(width, 10, depth), Position = Vector3.new(minX + width / 2, maxY * frac, zc - 4), Parent = ambience })
 		make("ParticleEmitter", {
 			Texture = SMOKE,
 			Color = ColorSequence.new(mistColor),
@@ -527,7 +533,7 @@ function Props.ambience(zoneIndex: number, theme, folder: Folder)
 
 	-- Drifting dust motes everywhere, plus a zone-specific floater: leaves in the forest,
 	-- spores in the burrows, crystal glints in the mines, ash, pages, pale petals...
-	local volume = deco({ Name = "Motes", Transparency = 1, Size = Vector3.new(width, maxY, depth), Position = Vector3.new(minX + width / 2, maxY / 2, 0), Parent = ambience })
+	local volume = deco({ Name = "Motes", Transparency = 1, Size = Vector3.new(width, maxY, depth), Position = Vector3.new(minX + width / 2, maxY / 2, zc), Parent = ambience })
 	make("ParticleEmitter", {
 		Name = "Dust",
 		Texture = SPARKLE,
@@ -593,7 +599,7 @@ function Props.ink(center: Vector3, size: Vector3, theme, parent: Instance)
 	part("Part", {
 		Name = "Ink",
 		Size = Vector3.new(size.X, size.Y * 0.8, size.Z),
-		Position = Vector3.new(center.X, top - size.Y * 0.4 - 0.4, 0),
+		Position = Vector3.new(center.X, top - size.Y * 0.4 - 0.4, center.Z),
 		Color = Color3.fromRGB(6, 8, 12),
 		Material = Enum.Material.Glass,
 		Reflectance = 0.35,
@@ -602,7 +608,7 @@ function Props.ink(center: Vector3, size: Vector3, theme, parent: Instance)
 	})
 	local skin = part("Part", {
 		Size = Vector3.new(size.X, 0.15, size.Z),
-		Position = Vector3.new(center.X, top - 0.4, 0),
+		Position = Vector3.new(center.X, top - 0.4, center.Z),
 		Color = theme.accent,
 		Material = Enum.Material.Neon,
 		Transparency = 0.75,

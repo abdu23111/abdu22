@@ -100,6 +100,10 @@ end
 -- World-space movement direction from the stick and the camera's heading.
 function Movement.moveWorld(): Vector3
 	local mv = Input.move()
+	if Config.SIDE_VIEW then
+		-- Left and right along the play plane; up/down only aims.
+		return if math.abs(mv.X) > 0.2 then Vector3.new(math.sign(mv.X), 0, 0) else Vector3.zero
+	end
 	if mv.Magnitude < 0.05 then
 		return Vector3.zero
 	end
@@ -234,6 +238,13 @@ local function swingStep(dt: number, root: BasePart)
 	end
 	if v.Magnitude > Config.SWING_MAX_SPEED then
 		v = v.Unit * Config.SWING_MAX_SPEED
+	end
+	if Config.SIDE_VIEW then
+		v = Vector3.new(v.X, v.Y, 0)
+		local p = root.Position
+		if math.abs(p.Z) > 0.02 then
+			root.CFrame = root.CFrame - Vector3.new(0, 0, p.Z)
+		end
 	end
 	root.AssemblyLinearVelocity = v
 	root.AssemblyAngularVelocity = Vector3.zero
@@ -485,6 +496,20 @@ local function step(dt: number)
 	end
 
 	v = Vector3.new(v.X, math.max(v.Y, -Config.MAX_FALL_SPEED), v.Z)
+	if Config.SIDE_VIEW then
+		-- Stay on the play plane and face straight left or right.
+		v = Vector3.new(v.X, v.Y, 0)
+		local p = root.Position
+		local look = root.CFrame.LookVector
+		if math.abs(p.Z) > 0.02 or math.abs(look.Z) > 0.02 then
+			local fx = if math.abs(look.X) > 0.05 then math.sign(look.X) else State.facingVector.X
+			if fx == 0 then
+				fx = 1
+			end
+			local planar = Vector3.new(p.X, p.Y, 0)
+			root.CFrame = CFrame.lookAt(planar, planar + Vector3.new(fx, 0, 0))
+		end
+	end
 	root.AssemblyLinearVelocity = v
 	State.moveSpeed = Vector3.new(v.X, 0, v.Z).Magnitude
 

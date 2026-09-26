@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Props = require(script.Parent.World.Props)
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
 
 local Projectiles = {}
 
@@ -49,6 +50,13 @@ rayParams.FilterType = Enum.RaycastFilterType.Include
 local damageFn: (Player, number, Vector3) -> ()
 
 function Projectiles.spawn(opts: Options)
+	if Config.SIDE_VIEW then
+		-- Keep everything on the play plane: depth in a velocity is folded into the vertical, so
+		-- radial bursts become fans the player can read and dodge.
+		local v = opts.velocity
+		opts.velocity = Vector3.new(v.X, v.Y + v.Z * 0.8, 0)
+		opts.position = Vector3.new(opts.position.X, opts.position.Y, 0)
+	end
 	local radius = opts.radius or 0.9
 	local color = opts.color or Color3.fromRGB(200, 255, 170)
 	local p = Props.make("Part", {

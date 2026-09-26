@@ -27,6 +27,8 @@ local Zones = require(Shared.Zones)
 
 local T = Config.TILE
 local WALL = Config.WALL_THICKNESS
+local SIDE_VIEW = Config.SIDE_VIEW
+local FRONT = Config.FRONT_DEPTH
 
 local CaveArt = {}
 CaveArt.debug = false
@@ -620,6 +622,55 @@ local function arch(x: number, floorY: number, height: number, hz: number, style
 			local z = rng:NextNumber(-span, span)
 			local y = springY + math.sin(math.acos(math.clamp(-z / span, -1, 1))) * rise
 			strand(Vector3.new(x, y, z), rng:NextNumber(2, 5), 0.25, theme.flora, Enum.Material.Grass, theme.flora, if rng:NextNumber() < 0.6 then pick(theme.glow) else nil)
+		end
+	end
+end
+
+-- In side view: an arch standing against the back wall, facing the camera.
+local function backArch(x: number, floorY: number, height: number, z: number, style: string)
+	local span = rng:NextNumber(5, 8)
+	local rise = math.min(4, height * 0.25)
+	local springY = floorY + height - rise
+	local stone = vary(theme.smooth, 0.03)
+	if style == "timber" then
+		local wood = vary(theme.wood, 0.04)
+		for _, s in { -1, 1 } do
+			block(CFrame.new(x + s * span, floorY + height / 2, z), Vector3.new(1, height, 1), wood, Enum.Material.WoodPlanks)
+			beam(Vector3.new(x + s * span, floorY + height - 3, z), Vector3.new(x + s * (span - 3), floorY + height, z), 0.6, 0.6, wood, Enum.Material.WoodPlanks)
+		end
+		block(CFrame.new(x, floorY + height + 0.5, z), Vector3.new(span * 2 + 2, 1.1, 1.1), wood, Enum.Material.WoodPlanks)
+		hangingLantern(Vector3.new(x, floorY + height, z + 0.6), Vector3.new(x, floorY + height - 2.4, z + 0.6), pick(theme.glow))
+		return
+	end
+	if style == "stone" then
+		for _, s in { -1, 1 } do
+			block(CFrame.new(x + s * span, floorY + (springY - floorY) / 2, z), Vector3.new(2.2, springY - floorY, 2.2), stone, theme.material)
+			block(CFrame.new(x + s * span, springY + 0.3, z), Vector3.new(2.7, 0.6, 2.7), theme.rim, Enum.Material.Marble)
+			block(CFrame.new(x + s * span, floorY + 0.6, z), Vector3.new(2.8, 1.2, 2.8), stone:Lerp(BLACK, 0.1), theme.material)
+		end
+	end
+	local n = 9
+	local prev: Vector3? = nil
+	for i = 0, n do
+		local a = math.pi * i / n
+		local p = Vector3.new(x - math.cos(a) * span, springY + math.sin(a) * rise, z)
+		if prev then
+			if style == "stone" then
+				beam(prev, p, 1.8, 1.6, if i == n // 2 + 1 then theme.rim else stone, Enum.Material.Marble)
+			elseif style == "root" then
+				rod(prev, p, rng:NextNumber(1, 1.5), vary(theme.wood, 0.05), Enum.Material.Wood)
+			else
+				rod(prev, p, 0.8, theme.bone, Enum.Material.Limestone)
+			end
+		end
+		prev = p
+	end
+	if style == "stone" then
+		local gem = block(CFrame.new(x, springY + rise + 0.3, z + 1) * CFrame.Angles(0, 0, math.rad(45)), Vector3.new(0.9, 0.9, 0.2), theme.accent, Enum.Material.Neon)
+		light(gem, theme.accent, 16, 0.8)
+	elseif style == "root" then
+		for _ = 1, 3 do
+			strand(Vector3.new(x + rng:NextNumber(-span, span), springY + rise * 0.6, z + 0.5), rng:NextNumber(2, 4), 0.22, theme.flora, Enum.Material.Grass, theme.flora, if rng:NextNumber() < 0.6 then pick(theme.glow) else nil)
 		end
 	end
 end
@@ -1475,7 +1526,7 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				local clear = clearance(c, r)
 				local floorY = rowTop(r + 1)
 				if rng:NextNumber() < 0.5 then
-					local side = if rng:NextNumber() < 0.5 then -1 else 1
+					local side = if SIDE_VIEW or rng:NextNumber() < 0.5 then -1 else 1
 					local radius = rng:NextNumber(3.5, 7)
 					local y = floorY + rng:NextNumber(0, math.max(2, clear * T * 0.8))
 					terrain:FillBall(Vector3.new(x + rng:NextNumber(-2, 2), y, side * (hz + radius * 0.6)), radius, theme.wall)
@@ -1484,7 +1535,8 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				if clear >= 8 and c - lastRib > 12 and not inArena(c) and rng:NextNumber() < 0.35 then
 					lastRib = c
 					local ceilY = rowTop(r - clear + 1)
-					terrain:FillCylinder(CFrame.new(x, ceilY - 1.5, 0) * CFrame.Angles(HALF_PI, 0, 0), hz * 2 + 8, rng:NextNumber(2.5, 3.5), theme.wall)
+					local zFront = if SIDE_VIEW then FRONT - 1 else hz + 4
+					terrain:FillCylinder(CFrame.new(x, ceilY - 1.5, (zFront - hz - 4) / 2) * CFrame.Angles(HALF_PI, 0, 0), hz + 4 + zFront, rng:NextNumber(2.5, 3.5), theme.wall)
 				end
 			end
 		end
@@ -1520,7 +1572,9 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 			local cEnd = math.min(s.c2, cc + 3)
 			local hz = hzAt(cc)
 			for _, side in { -1, 1 } do
-				style.trim(colX(cc) - T / 2, colX(cEnd) + T / 2, s.y, side * hz, side)
+				-- In side view the "near wall" is the front edge of the floor.
+				local z = if SIDE_VIEW and side > 0 then FRONT else side * hz
+				style.trim(colX(cc) - T / 2, colX(cEnd) + T / 2, s.y, z, side)
 			end
 			cc = cEnd + 1
 		end
@@ -1530,7 +1584,13 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 			for _, side in { -1, 1 } do
 				if rng:NextNumber() < 0.38 then
 					local sz = Vector3.new(rng:NextNumber(2.5, 5), rng:NextNumber(1.4, 3.2), rng:NextNumber(2.2, 3.6))
-					rockLump(Vector3.new(x + rng:NextNumber(-1.5, 1.5), s.y + sz.Y * 0.28, side * (hz - 0.3)), sz, theme.rock:Lerp(theme.rockDark, rng:NextNumber(0, 0.35)))
+					local z = side * (hz - 0.3)
+					if SIDE_VIEW and side > 0 then
+						-- Small stones along the front lip, low enough never to hide the feet.
+						sz = Vector3.new(sz.X * 0.6, math.min(sz.Y * 0.5, 1.2), sz.Z * 0.6)
+						z = FRONT - 0.4
+					end
+					rockLump(Vector3.new(x + rng:NextNumber(-1.5, 1.5), s.y + sz.Y * 0.28, z), sz, theme.rock:Lerp(theme.rockDark, rng:NextNumber(0, 0.35)))
 				end
 			end
 		end
@@ -1542,14 +1602,14 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				local ex = colX(edge.c) + edge.dir * T / 2
 				local hz = hzAt(edge.c)
 				local z = -hz + 1
-				while z < hz - 1 and style.platform ~= "mushroom" do
+				while z < (if SIDE_VIEW then FRONT - 1 else hz - 1) and style.platform ~= "mushroom" do
 					local sz = rng:NextNumber(1.2, 2.4)
 					rockLump(Vector3.new(ex - edge.dir * sz * 0.35, s.y - sz * 0.15, z), Vector3.new(sz * 1.2, sz * 0.8, sz * 1.3), theme.rock:Lerp(theme.rim, rng:NextNumber(0, 0.3)))
 					z += rng:NextNumber(3.2, 5)
 				end
 				-- Moss or roots hanging down the drop.
 				for _ = 1, rng:NextInteger(1, 3) do
-					strand(Vector3.new(ex + edge.dir * 0.3, s.y - 0.5, rng:NextNumber(-hz + 2, hz - 2)), rng:NextNumber(2, 5), 0.25, theme.flora, Enum.Material.Grass, nil, nil)
+					strand(Vector3.new(ex + edge.dir * 0.3, s.y - 0.5, rng:NextNumber(-hz + 2, if SIDE_VIEW then FRONT - 1 else hz - 2)), rng:NextNumber(2, 5), 0.25, theme.flora, Enum.Material.Grass, nil, nil)
 				end
 			end
 		end
@@ -1561,7 +1621,7 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 			if not busy[c] then
 				local hz = hzAt(c)
 				local space = clearance(c, s.r) * T
-				local side = if rng:NextNumber() < 0.5 then -1 else 1
+				local side = if SIDE_VIEW or rng:NextNumber() < 0.5 then -1 else 1
 				local lit = x - lastLightX > 17
 				local collide = not inArena(c)
 				local pos = Vector3.new(x, s.y, side * (hz - rng:NextNumber(2.2, 3.5)))
@@ -1573,7 +1633,8 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				-- Ground cover scattered across the floor.
 				for _ = 1, 2 do
 					if rng:NextNumber() < 0.35 then
-						style.ground(Vector3.new(x + rng:NextNumber(-3, 3), s.y, rng:NextNumber(-hz + 2, hz - 2)))
+						local gz = if SIDE_VIEW then (if rng:NextNumber() < 0.75 then rng:NextNumber(-hz + 2, -2.5) else rng:NextNumber(2.5, FRONT - 0.5)) else rng:NextNumber(-hz + 2, hz - 2)
+						style.ground(Vector3.new(x + rng:NextNumber(-3, 3), s.y, gz))
 					end
 				end
 			end
@@ -1591,12 +1652,12 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 			if not isSolid(chars, c, r, w, h) and isSolid(chars, c, r + 1, w, h) then
 				local clear = clearance(c, r)
 				local floorY = rowTop(r + 1)
-				for _, side in { -1, 1 } do
+				for _, side in (if SIDE_VIEW then { -1 } else { -1, 1 }) do
 					local y = floorY + rng:NextNumber(4, 7)
 					local limit = floorY + clear * T - 3
 					while y < limit do
 						local high = y - floorY > 36
-						if rng:NextNumber() < (if high then 0.22 else 0.26) and not busy[c] then
+						if rng:NextNumber() < (if high then 0.22 else if SIDE_VIEW then 0.4 else 0.26) and not busy[c] then
 							-- Lights high on tall walls keep the upper cave from going black.
 							local lit = y - floorY > 10 and rng:NextNumber() < (if high then 0.6 else 0.28)
 							style.wall(Vector3.new(x + rng:NextNumber(-1.5, 1.5), y, side * (hz - 0.1)), side, lit)
@@ -1627,7 +1688,8 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 					local ceilY = rowTop(r)
 					for _ = 1, 2 do
 						if rng:NextNumber() < 0.2 then
-							style.hang(Vector3.new(x + rng:NextNumber(-1.8, 1.8), ceilY + 0.5, rng:NextNumber(-hz + 1.5, hz - 1.5)), maxLen)
+							local hzz = if SIDE_VIEW then rng:NextNumber(-hz + 1.5, -1.5) else rng:NextNumber(-hz + 1.5, hz - 1.5)
+							style.hang(Vector3.new(x + rng:NextNumber(-1.8, 1.8), ceilY + 0.5, hzz), maxLen)
 						end
 					end
 				end
@@ -1653,7 +1715,9 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 					lastArch = c
 					local height = math.min(clear * T - 3, rng:NextNumber(14, 20))
 					local hz = hzAt(c)
-					if style.archStyle == "timber" then
+					if SIDE_VIEW then
+						backArch(colX(c), s.y, height, -(hz - 2.5), style.archStyle)
+					elseif style.archStyle == "timber" then
 						timberFrame(colX(c), s.y, height, hz, true, pick(theme.glow), not inArena(c))
 					else
 						arch(colX(c), s.y, height, hz, style.archStyle, not inArena(c))
@@ -1680,21 +1744,25 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 			local bottom = s.y - T
 			if style.platform == "wood" then
 				local plankZ = -hz + 0.6
-				while plankZ < hz - 0.6 do
+				while plankZ < (if SIDE_VIEW then FRONT - 0.4 else hz - 0.6) do
 					block(CFrame.new((x1 + x2) / 2, s.y + 0.05, plankZ), Vector3.new(x2 - x1 + 0.4, 0.3, 0.95), vary(theme.wood, 0.06), Enum.Material.WoodPlanks)
 					plankZ += 1.1
 				end
 				for _, x in { x1 + 0.4, x2 - 0.4 } do
-					block(CFrame.new(x, bottom + 0.3, 0), Vector3.new(0.8, 0.8, hz * 2), theme.wood:Lerp(BLACK, 0.25), Enum.Material.Wood)
+					local zc = if SIDE_VIEW then (FRONT - hz) / 2 else 0
+					local zs = if SIDE_VIEW then hz + FRONT else hz * 2
+					block(CFrame.new(x, bottom + 0.3, zc), Vector3.new(0.8, 0.8, zs), theme.wood:Lerp(BLACK, 0.25), Enum.Material.Wood)
 					-- Ropes up into the dark.
-					for _, z in { -hz * 0.6, hz * 0.6 } do
+					for _, z in (if SIDE_VIEW then { -hz * 0.6, -2 } else { -hz * 0.6, hz * 0.6 }) do
 						rod(Vector3.new(x, s.y, z), Vector3.new(x, s.y + 26, z), 0.18, Color3.fromRGB(150, 124, 90), Enum.Material.Fabric)
 					end
 				end
 			elseif style.platform == "mushroom" then
 				local cx = (x1 + x2) / 2
 				-- The platform becomes a giant cap: glowing gills underneath, a stem to the floor.
-				local gills = ellipsoid(CFrame.new(cx, bottom - 0.3, 0), Vector3.new(x2 - x1 + 4, 2, hz * 2), pick(theme.glow), Enum.Material.Neon)
+				local gz = if SIDE_VIEW then (FRONT - hz) / 2 else 0
+				local gd = if SIDE_VIEW then hz + FRONT else hz * 2
+				local gills = ellipsoid(CFrame.new(cx, bottom - 0.3, gz), Vector3.new(x2 - x1 + 4, 2, gd), pick(theme.glow), Enum.Material.Neon)
 				gills.Transparency = 0.15
 				light(gills, gills.Color, 30, 1.2)
 				local rr = under
@@ -1703,15 +1771,18 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				end
 				local groundY = rowTop(rr)
 				if s.y - groundY < 60 then
-					rod(Vector3.new(cx, groundY, 0), Vector3.new(cx, bottom, 0), math.min(4, (x2 - x1) * 0.3), Color3.fromRGB(200, 214, 230), Enum.Material.SmoothPlastic)
+					local stemZ = if SIDE_VIEW then -3 else 0
+					rod(Vector3.new(cx, groundY, stemZ), Vector3.new(cx, bottom, stemZ), math.min(4, (x2 - x1) * 0.3), Color3.fromRGB(200, 214, 230), Enum.Material.SmoothPlastic)
 				end
 			else
 				-- Dressed stone with a gilded edge.
+				local zc = if SIDE_VIEW then (FRONT - hz) / 2 else 0
+				local zs = if SIDE_VIEW then hz + FRONT else hz * 2
 				for _, x in { x1, x2 } do
-					block(CFrame.new(x, s.y - 0.4, 0), Vector3.new(0.6, 0.8, hz * 2), theme.rim, Enum.Material.Metal)
+					block(CFrame.new(x, s.y - 0.4, zc), Vector3.new(0.6, 0.8, zs), theme.rim, Enum.Material.Metal)
 				end
 				for _ = 1, 3 do
-					spike(Vector3.new(rng:NextNumber(x1 + 1, x2 - 1), bottom, rng:NextNumber(-hz + 3, hz - 3)), -Vector3.yAxis, rng:NextNumber(2, 5), 0.8, theme.rock, theme.material, theme.rim)
+					spike(Vector3.new(rng:NextNumber(x1 + 1, x2 - 1), bottom, rng:NextNumber(-hz + 3, if SIDE_VIEW then FRONT - 1 else hz - 3)), -Vector3.yAxis, rng:NextNumber(2, 5), 0.8, theme.rock, theme.material, theme.rim)
 				end
 			end
 		end
@@ -1739,7 +1810,7 @@ function CaveArt.dress(zoneIndex: number, chars, w: number, h: number, zoneTheme
 				if dest and sc >= 1 and sc <= w then
 					local hz = hzAt(sc)
 					local floorY = rowTop(r + 1)
-					signpost(Vector3.new(colX(sc), floorY, -(hz - 3)), Vector3.new(inward, 0, 0), dest)
+					signpost(Vector3.new(colX(sc), floorY, if SIDE_VIEW then -4 else -(hz - 3)), if SIDE_VIEW then Vector3.new(0, 0, 1) else Vector3.new(inward, 0, 0), dest)
 				end
 			end
 		end

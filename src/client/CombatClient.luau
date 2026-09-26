@@ -128,6 +128,10 @@ local function makeReticle()
 end
 
 local function toggleLock()
+	if Config.SIDE_VIEW then
+		-- Everything is on one plane in side view; lock-on isn't needed.
+		return
+	end
 	if State.lockTarget then
 		setLock(nil)
 		return
@@ -163,6 +167,11 @@ end
 -- else where the character already faces.
 local function aimDirection(root: BasePart): Vector3
 	local look = State.facingVector
+	if Config.SIDE_VIEW then
+		-- Swing the way you're pressing, else the way you face.
+		local m = Movement.moveWorld()
+		return if m.X ~= 0 then Vector3.new(m.X, 0, 0) else Vector3.new(if look.X < 0 then -1 else 1, 0, 0)
+	end
 	if alive(State.lockTarget) then
 		return flat((State.lockTarget :: BasePart).Position - root.Position) or look
 	end
@@ -182,6 +191,14 @@ end
 
 -- Up and down strikes follow the camera's pitch or where the foe is.
 local function strikeDirection(root: BasePart): string
+	if Config.SIDE_VIEW then
+		if Input.lookUp() then
+			return "up"
+		elseif Input.lookDown() and not State.grounded then
+			return "down"
+		end
+		return "side"
+	end
 	local camera = workspace.CurrentCamera
 	local pitch = if camera then camera.CFrame.LookVector.Y else 0
 	local target = if alive(State.lockTarget) then State.lockTarget else nil

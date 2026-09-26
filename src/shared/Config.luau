@@ -5,6 +5,11 @@ local Config = {}
 
 -- World grid
 Config.TILE = 4 -- studs per map tile
+-- Side-view (2D) play: everything moves on the z = 0 plane and the camera looks at the level
+-- from the side. The level is a cross-section: solid rock runs from the back wall to FRONT_DEPTH
+-- studs in front of the play plane, and there is no near wall.
+Config.SIDE_VIEW = true
+Config.FRONT_DEPTH = 6
 Config.DEPTH = 14 -- thickness of foreground tiles along Z
 Config.ZONE_SPACING = 1200 -- zones are laid out side by side along X, this far apart
 -- 3D caves: each map is extruded into a winding corridor. Its half-width (in studs) wanders
@@ -68,8 +73,8 @@ Config.POGO_VELOCITY = 58
 Config.KNOCKBACK = Vector2.new(36, 32)
 
 -- Camera
-Config.CAMERA_DISTANCE = 62
-Config.CAMERA_ARENA_DISTANCE = 78 -- pulls back during boss fights
+Config.CAMERA_DISTANCE = 52
+Config.CAMERA_ARENA_DISTANCE = 68 -- pulls back during boss fights
 Config.CAMERA_FOV = 40
 Config.CAMERA_HEIGHT = 3
 Config.CAMERA_LOOKAHEAD = 6

@@ -54,12 +54,14 @@ function Input.consumeLook(): Vector2
 	return d
 end
 
--- Kept for compatibility with older combat code; aim is automatic in 3D.
+-- Aim / peek: W / Up / stick up, and S / Down / stick down.
 function Input.lookUp(): boolean
-	return false
+	local k = Input.keys
+	return k[Enum.KeyCode.W] == true or k[Enum.KeyCode.Up] == true or Input.stick.Y > 0.55 or Input.touchMove.Y > 0.6
 end
 function Input.lookDown(): boolean
-	return false
+	local k = Input.keys
+	return k[Enum.KeyCode.S] == true or k[Enum.KeyCode.Down] == true or Input.stick.Y < -0.55 or Input.touchMove.Y < -0.6
 end
 
 local JUMP = { [Enum.KeyCode.Space] = true, [Enum.KeyCode.ButtonA] = true }
@@ -300,9 +302,6 @@ if UserInputService.TouchEnabled then
 		Input.focusHeld = false
 		fire("focusEnd")
 	end)
-	touchButton(gui, "LOCK", UDim2.new(1, -60, 0.45, 0), 52, function()
-		fire("lock")
-	end)
 	touchButton(gui, "SWING", UDim2.new(1, -150, 0.45, 0), 60, function()
 		Input.swingHeld = true
 		fire("swing")
@@ -310,9 +309,7 @@ if UserInputService.TouchEnabled then
 		Input.swingHeld = false
 		fire("swingRelease")
 	end)
-	touchButton(gui, "VIEW", UDim2.new(1, -60, 0, 120), 46, function()
-		fire("view")
-	end)
+
 	touchButton(gui, "MAP", UDim2.new(1, -60, 0, 60), 50, function()
 		fire("map")
 	end)

@@ -67,6 +67,10 @@ rayParams.FilterType = Enum.RaycastFilterType.Include
 local PlayerService
 
 local function flat(v: Vector3): Vector3
+	if Config.SIDE_VIEW then
+		-- Left or right only.
+		return if math.abs(v.X) > 1e-4 then Vector3.new(math.sign(v.X), 0, 0) else Vector3.zero
+	end
 	local f = Vector3.new(v.X, 0, v.Z)
 	return if f.Magnitude > 1e-4 then f.Unit else Vector3.zero
 end
@@ -87,6 +91,12 @@ local function setWarning(enemy: Enemy, on: boolean)
 end
 
 local function place(enemy: Enemy)
+	if Config.SIDE_VIEW then
+		-- Stay on the play plane, facing left or right.
+		enemy.position = Vector3.new(enemy.position.X, enemy.position.Y, 0)
+		enemy.velocity = Vector3.new(enemy.velocity.X, enemy.velocity.Y, 0)
+		enemy.dir = Vector3.new(if enemy.dir.X < 0 then -1 else 1, 0, 0)
+	end
 	if enemy.hitbox then
 		enemy.hitbox.CFrame = Rig.frame(enemy.position, enemy.dir)
 	end

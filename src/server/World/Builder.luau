@@ -96,14 +96,22 @@ local function maxHalf(zoneIndex: number, c1: number, c2: number): number
 	return m
 end
 
--- Center and size of a rectangle of tiles; `zHalf` sets how far it extends along Z.
+local FRONT = Config.FRONT_DEPTH
+
+-- Center and size of a rectangle of tiles; `zHalf` sets how far it extends along Z. In side
+-- view the level is a cross-section: everything runs from `zHalf` behind the play plane to
+-- FRONT_DEPTH in front of it, so the camera looks straight at the path.
 local function rectToWorld(zoneIndex: number, rect, zHalf: number): (Vector3, Vector3)
 	local _, h = Grid.size(zoneIndex)
 	local ox = Grid.originX(zoneIndex)
 	local c1, r1, c2, r2 = rect[1], rect[2], rect[3], rect[4]
 	local left, right = ox + (c1 - 1) * T, ox + c2 * T
 	local top, bottom = (h - r1 + 1) * T, (h - r2) * T
-	return Vector3.new((left + right) / 2, (top + bottom) / 2, 0), Vector3.new(right - left, top - bottom, zHalf * 2)
+	local back, front = zHalf, zHalf
+	if Config.SIDE_VIEW then
+		front = math.min(zHalf, FRONT)
+	end
+	return Vector3.new((left + right) / 2, (top + bottom) / 2, (front - back) / 2), Vector3.new(right - left, top - bottom, back + front)
 end
 
 local function buildTerrain(zoneIndex: number, chars, w: number, h: number, theme, folder: Folder)
@@ -113,16 +121,33 @@ local function buildTerrain(zoneIndex: number, chars, w: number, h: number, them
 	for c = 1, w do
 		local hz = Grid.halfWidth(zoneIndex, c)
 		local x = ox + (c - 0.5) * T
-		for _, side in { -1, 1 } do
+		for _, side in (if Config.SIDE_VIEW then { -1 } else { -1, 1 }) do
 			terrain:FillBlock(CFrame.new(x, height / 2, side * (hz + WALL / 2)), Vector3.new(T, height + 8, WALL), theme.wall)
 		end
 	end
 	-- Solid tiles, extruded across the corridor and into the walls.
+	local faces = if Config.SIDE_VIEW then make("Folder", { Name = "GroundFaces", Parent = folder }) else nil
 	for _, rect in mergeRects(chars, w, h, function(ch)
 		return ch == "#"
 	end) do
 		local center, size = rectToWorld(zoneIndex, rect, maxHalf(zoneIndex, rect[1], rect[3]) + WALL)
 		terrain:FillBlock(CFrame.new(center), size, theme.wall)
+		if faces then
+			-- The cut face of solid ground, inked dark so the lit play space reads clearly
+			-- against it (and platforms stand out as silhouettes).
+			make("Part", {
+				Anchored = true,
+				CanCollide = false,
+				CanQuery = false,
+				CanTouch = false,
+				CastShadow = false,
+				Size = Vector3.new(size.X, size.Y, 0.4),
+				Position = Vector3.new(center.X, center.Y, FRONT + 2),
+				Color = theme.rockDark:Lerp(Color3.new(0, 0, 0), 0.35),
+				Material = theme.material,
+				Parent = faces,
+			})
+		end
 	end
 	-- Walkable tops get the zone's surface material.
 	for r = 2, h do
@@ -177,7 +202,7 @@ local function buildHazards(zoneIndex: number, chars, w: number, h: number, them
 				CanCollide = false,
 				Transparency = 1,
 				Size = Vector3.new(size.X - 0.4, T * (if ch == "~" then 0.7 else 0.55), size.Z),
-				Position = Vector3.new(center.X, bottom + T * (if ch == "~" then 0.35 else 0.3), 0),
+				Position = Vector3.new(center.X, bottom + T * (if ch == "~" then 0.35 else 0.3), center.Z),
 				Parent = hazards,
 			})
 			if ch == "~" then
@@ -187,7 +212,7 @@ local function buildHazards(zoneIndex: number, chars, w: number, h: number, them
 				local x = center.X - size.X / 2 + 1
 				while x < center.X + size.X / 2 do
 					local z = -hz
-					while z < hz do
+					while z < (if Config.SIDE_VIEW then FRONT - 1 else hz) do
 						Props.thorn3D(Vector3.new(x + rng:NextNumber(-0.8, 0.8), bottom, z + rng:NextNumber(-1, 1)), rng, hazards)
 						z += 2.6
 					end
@@ -280,7 +305,10 @@ local function buildDoors(zoneIndex: number, chars, w: number, h: number, theme,
 			local open = Props.DOOR_WIDTH / 2
 			local fillDepth = hz + WALL - open
 			for _, side in { -1, 1 } do
-				terrain:FillBlock(CFrame.new(center.X, center.Y, side * (open + fillDepth / 2 + 1)), Vector3.new(size.X, size.Y + 2, fillDepth), theme.wall)
+				local depth = if side > 0 and Config.SIDE_VIEW then 0 else fillDepth
+				if depth > 0 then
+					terrain:FillBlock(CFrame.new(center.X, center.Y, side * (open + depth / 2 + 1)), Vector3.new(size.X, size.Y + 2, depth), theme.wall)
+				end
 			end
 			Props.doorway(center, size, inward, theme, doorsFolder)
 		end
@@ -345,7 +373,7 @@ function Builder.build(): { ZoneInfo }
 				local floorPos = pos - Vector3.new(0, T / 2, 0)
 				local hz = Grid.halfWidth(zoneIndex, c)
 				-- NPCs and benches stand toward the back wall, facing into the corridor.
-				local backZ = -math.min(hz - 5, 8)
+				local backZ = if Config.SIDE_VIEW then -4 else -math.min(hz - 5, 8)
 				if ch == "o" then
 					local anchors = folder:FindFirstChild("SwingAnchors") or make("Folder", { Name = "SwingAnchors", Parent = folder })
 					Props.swingAnchor(pos, scanVertical(zoneIndex, chars, c, r, -1), theme, anchors)
@@ -356,9 +384,9 @@ function Builder.build(): { ZoneInfo }
 				elseif ch == "B" then
 					local id = string.format("%s:%d,%d", zone.id, c, r)
 					Props.bench(id, floorPos + Vector3.new(0, 0, backZ), theme, interact)
-					info.benches[id] = CFrame.new(floorPos + Vector3.new(0, 3, backZ + 4))
+					info.benches[id] = CFrame.new(floorPos + Vector3.new(0, 3, if Config.SIDE_VIEW then 0 else backZ + 4))
 				elseif string.find("cfsgmhw", ch, 1, true) then
-					local z = rng:NextNumber(-hz * 0.4, hz * 0.4)
+					local z = if Config.SIDE_VIEW then 0 else rng:NextNumber(-hz * 0.4, hz * 0.4)
 					table.insert(info.enemies, { kind = ch, position = pos + Vector3.new(0, 0, z), zone = zoneIndex })
 				elseif string.match(ch, "%a") and zone.specials[ch] then
 					local spec = zone.specials[ch]

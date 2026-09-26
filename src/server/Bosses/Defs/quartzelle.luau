@@ -50,13 +50,13 @@ return {
 				local angles = if b.phase >= 2 then { -0.35, 0.35 } else { 0 }
 				local from = b.position + Vector3.new(0, 1, 0)
 				for _, a in angles do
-					local dir = Vector3.new(base.X * math.cos(a) - base.Z * math.sin(a), 0, base.X * math.sin(a) + base.Z * math.cos(a)).Unit
+					local dir = b.rotate(base.Unit, a)
 					b.beamWarn(from, dir, 90, 0.8)
 				end
 				b.telegraph(0.8)
 				b.setAnim("shoot", true)
 				for _, a in angles do
-					local dir = Vector3.new(base.X * math.cos(a) - base.Z * math.sin(a), 0, base.X * math.sin(a) + base.Z * math.cos(a)).Unit
+					local dir = b.rotate(base.Unit, a)
 					b.beam(from, dir, 90, 0.45)
 				end
 				b.shake(0.6)
